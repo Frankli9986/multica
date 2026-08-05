@@ -439,6 +439,44 @@ describe("ThreadNavPanel", () => {
     expect(onJump).toHaveBeenCalledWith("t2");
   });
 
+  // Same chords cmdk's vimBindings give the command palette, so the muscle
+  // memory carries across every list-with-a-highlight in the product.
+  it.each([
+    ["n", "t2"],
+    ["j", "t2"],
+    ["p", "t4"],
+    ["k", "t4"],
+  ])("moves the cursor on Ctrl+%s", (key, expected) => {
+    const onJump = vi.fn();
+    renderWithI18n(<Harness onJump={onJump} />);
+    fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
+    const panel = screen.getByTestId("panel");
+    fireEvent.keyDown(panel, { key, ctrlKey: true });
+    fireEvent.keyDown(panel, { key: "Enter" });
+    expect(onJump).toHaveBeenCalledWith(expected);
+  });
+
+  it("leaves the letters alone without Ctrl, so they can be typed into search", () => {
+    const onJump = vi.fn();
+    renderWithI18n(<Harness onJump={onJump} />);
+    fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
+    const panel = screen.getByTestId("panel");
+    fireEvent.keyDown(panel, { key: "n" });
+    fireEvent.keyDown(panel, { key: "Enter" });
+    expect(onJump).toHaveBeenCalledWith("t1");
+  });
+
+  it("ignores the aliases when another modifier is held", () => {
+    const onJump = vi.fn();
+    renderWithI18n(<Harness onJump={onJump} />);
+    fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
+    const panel = screen.getByTestId("panel");
+    // Ctrl+Shift+N is the browser's incognito window, not our navigation.
+    fireEvent.keyDown(panel, { key: "n", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(panel, { key: "Enter" });
+    expect(onJump).toHaveBeenCalledWith("t1");
+  });
+
   it("wraps the cursor at the top of the list", () => {
     const onJump = vi.fn();
     renderWithI18n(<Harness onJump={onJump} />);

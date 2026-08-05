@@ -18,6 +18,7 @@ import {
   TooltipTrigger,
 } from "@multica/ui/components/ui/tooltip";
 import { ActorAvatar } from "../../common/actor-avatar";
+import { pickerNavigationDirection } from "../../common/picker-keys";
 import { ShortcutKeycaps } from "../../common/shortcut-keycaps";
 import { useT } from "../../i18n";
 import { commentPreview } from "./thread-minimap";
@@ -429,10 +430,18 @@ export function ThreadNavPanel({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      // Arrow keys plus the Ctrl+N/J and Ctrl+P/K aliases, from the same policy
+      // the editor's pickers use — which in turn mirrors what cmdk's
+      // `vimBindings` gives the command bar for free. One list-with-a-highlight
+      // should not navigate differently from the next.
+      const direction = pickerNavigationDirection(e.nativeEvent);
+      if (direction) {
+        // preventDefault matters for the letter aliases specifically: focus is
+        // in the search field, where Ctrl+K/N/P are readline editing commands
+        // that would otherwise mangle the query while moving the cursor.
         e.preventDefault();
         if (rows.length === 0) return;
-        const step = e.key === "ArrowDown" ? 1 : -1;
+        const step = direction === "next" ? 1 : -1;
         setActiveIndex((prev) => (prev + step + rows.length) % rows.length);
         return;
       }
@@ -444,6 +453,10 @@ export function ThreadNavPanel({
       }
       // Escape is Base UI's job — it already routes through onOpenChange and
       // restores focus to the trigger.
+      //
+      // Tab is deliberately NOT an accept key here, unlike the editor pickers:
+      // this is a popover, and Tab has to stay focus navigation so the filter
+      // pills remain keyboard-reachable.
     },
     [activeIndex, jump, rows],
   );
