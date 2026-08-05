@@ -12,6 +12,8 @@ import {
 import { Button } from "@multica/ui/components/ui/button";
 import { cn } from "@multica/ui/lib/utils";
 import { createShortcutChord, getShortcut } from "@multica/core/shortcuts";
+import { preprocessMentionShortcodes } from "@multica/core/markdown";
+import { isImeComposing } from "@multica/core/utils";
 import {
   Tooltip,
   TooltipContent,
@@ -136,14 +138,19 @@ export function matchesFilter(thread: ThreadNavThread, filter: ThreadNavFilter):
 }
 
 /**
- * Whether `content` @mentions `userId`. Mentions serialize as markdown links
- * to `mention://member/<uuid>`; the legacy `[@ id="..."]` shortcode form is
- * normalised into that shape by `preprocessMentionShortcodes` before storage,
- * so matching the link URL is sufficient.
+ * Whether `content` @mentions `userId`.
+ *
+ * Current mentions serialize as markdown links to `mention://member/<uuid>`,
+ * but the legacy `[@ id="..." label="..."]` shortcode form is still sitting in
+ * the database — `preprocessMarkdown` migrates it *on read*, not before
+ * storage, and the timeline hands us raw content. Matching only the link form
+ * silently dropped every thread whose sole mention of the reader was written in
+ * the old format. `preprocessMentionShortcodes` returns its input untouched
+ * when there is no `[@ ` in it, so the normal path costs one substring scan.
  */
 export function mentionsUser(content: string | undefined, userId: string): boolean {
   if (!content || !userId) return false;
-  return content.includes(`mention://member/${userId}`);
+  return preprocessMentionShortcodes(content).includes(`mention://member/${userId}`);
 }
 
 /**
@@ -226,7 +233,7 @@ function ThreadRow({
             {highlightMatches(title, query)}
           </span>
           <span className="shrink-0 text-micro tabular-nums text-faint-foreground">
-            {prepared.thread.entry.created_at ? formatClock(prepared.thread.entry.created_at) : ""}
+            {formatStamp(prepared.thread.entry.created_at, prepared.group)}
           </span>
         </span>
         <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-caption text-muted-foreground">
@@ -255,18 +262,23 @@ function ThreadRow({
 }
 
 /**
- * Wall-clock for today/yesterday rows, calendar date beyond that — the group
- * header already says which day, so repeating it per row would be redundant
- * where it is known and missing where it is not.
+ * Wall-clock under a today/yesterday header, calendar date under "earlier" —
+ * the header already names the day in the first two cases, so repeating it per
+ * row would be redundant where it is known and missing where it is not.
+ *
+ * Driven by the row's own group rather than a second "less than 48 hours ago"
+ * test. Those two boundaries disagree for most of the day: an entry from
+ * 23:41 the day before yesterday is under 48 hours old but groups under
+ * "earlier", and it rendered as a bare `11:41 PM` with nothing saying which
+ * day. One boundary, decided once, cannot drift from itself.
  */
-function formatClock(createdAt: string): string {
+export function formatStamp(createdAt: string, group: ThreadDayGroup): string {
   const ts = Date.parse(createdAt);
   if (Number.isNaN(ts)) return "";
   const d = new Date(ts);
-  const withinTwoDays = Date.now() - ts < 2 * DAY_MS;
-  return withinTwoDays
-    ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return group === "earlier"
+    ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
 interface ThreadNavPanelProps {
@@ -430,6 +442,11 @@ export function ThreadNavPanel({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // An IME commit arrives as Enter (and the aliases as plain letters) while
+      // composing. Acting on those would jump away mid-word and close the panel
+      // the moment a CJK user picked a candidate — the search field is the one
+      // place in this panel people type prose.
+      if (isImeComposing(e)) return;
       // Arrow keys plus the Ctrl+N/J and Ctrl+P/K aliases, from the same policy
       // the editor's pickers use — which in turn mirrors what cmdk's
       // `vimBindings` gives the command bar for free. One list-with-a-highlight
@@ -445,7 +462,14 @@ export function ThreadNavPanel({
         setActiveIndex((prev) => (prev + step + rows.length) % rows.length);
         return;
       }
-      if (e.key === "Enter") {
+      // Enter belongs to the search field alone. The handler sits on the popup
+      // so navigation works from anywhere inside it, which means a child
+      // button's Enter also bubbles here — and `preventDefault` on a button's
+      // keydown cancels the click the browser was about to synthesize. Handling
+      // it unconditionally therefore made the filter pills and the rows
+      // impossible to activate by keyboard: Enter on "Resolved" jumped to the
+      // active row and closed the panel instead of filtering.
+      if (e.key === "Enter" && e.target === searchRef.current) {
         const row = rows[activeIndex];
         if (!row) return;
         e.preventDefault();

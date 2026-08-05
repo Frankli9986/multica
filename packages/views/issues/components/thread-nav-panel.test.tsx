@@ -7,6 +7,7 @@ import type { TimelineEntry } from "@multica/core/types";
 import { renderWithI18n } from "../../test/i18n";
 import {
   ThreadNavPanel,
+  formatStamp,
   highlightMatches,
   matchesFilter,
   mentionsUser,
@@ -187,6 +188,30 @@ describe("threadDayGroup", () => {
   });
 });
 
+describe("formatStamp", () => {
+  // The row's stamp and its group header must agree about what day it is. A
+  // second "less than 48 hours ago" test disagreed with the calendar-day
+  // grouping for most of the day, and an "earlier" row could render a bare
+  // clock time with nothing saying which day it belonged to.
+  const at = (iso: string) => new Date(iso).toISOString();
+
+  it("shows a clock time under today and yesterday", () => {
+    expect(formatStamp(at("2026-08-05T14:20:00"), "today")).toMatch(/\d/);
+    expect(formatStamp(at("2026-08-05T14:20:00"), "today")).not.toMatch(/[A-Za-z]{3}/);
+    expect(formatStamp(at("2026-08-04T14:20:00"), "yesterday")).not.toMatch(/[A-Za-z]{3}/);
+  });
+
+  it("always shows a date under earlier, even when it is under 48 hours old", () => {
+    // The regression: 23:41 the day before yesterday is < 48h but groups as
+    // "earlier", and used to render as a bare clock time.
+    expect(formatStamp(at("2026-08-03T23:41:00"), "earlier")).toMatch(/[A-Za-z]{3}|\d+\/\d+|月/);
+  });
+
+  it("returns an empty string for an unparseable timestamp", () => {
+    expect(formatStamp("not-a-date", "today")).toBe("");
+  });
+});
+
 describe("matchesFilter", () => {
   it("splits on resolution and participation", () => {
     const open = thread("a", "x");
@@ -241,6 +266,13 @@ describe("highlightMatches", () => {
 describe("mentionsUser", () => {
   it("matches the markdown mention link form", () => {
     expect(mentionsUser("hey [@Jiayuan](mention://member/user-1) look", "user-1")).toBe(true);
+  });
+
+  it("matches the legacy shortcode form still sitting in the database", () => {
+    // preprocessMarkdown migrates `[@ id=... label=...]` on READ, not before
+    // storage, so the timeline hands this straight through.
+    expect(mentionsUser('hey [@ id="user-1" label="Jiayuan"] look', "user-1")).toBe(true);
+    expect(mentionsUser('[@ id="user-2" label="Wei"]', "user-1")).toBe(false);
   });
 
   it("does not match another member or an agent mention", () => {
@@ -433,9 +465,9 @@ describe("ThreadNavPanel", () => {
     const onJump = vi.fn();
     renderWithI18n(<Harness onJump={onJump} />);
     fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
-    const panel = screen.getByTestId("panel");
-    fireEvent.keyDown(panel, { key: "ArrowDown" });
-    fireEvent.keyDown(panel, { key: "Enter" });
+    const search = screen.getByPlaceholderText("Search threads or authors");
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    fireEvent.keyDown(search, { key: "Enter" });
     expect(onJump).toHaveBeenCalledWith("t2");
   });
 
@@ -450,9 +482,9 @@ describe("ThreadNavPanel", () => {
     const onJump = vi.fn();
     renderWithI18n(<Harness onJump={onJump} />);
     fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
-    const panel = screen.getByTestId("panel");
-    fireEvent.keyDown(panel, { key, ctrlKey: true });
-    fireEvent.keyDown(panel, { key: "Enter" });
+    const search = screen.getByPlaceholderText("Search threads or authors");
+    fireEvent.keyDown(search, { key, ctrlKey: true });
+    fireEvent.keyDown(search, { key: "Enter" });
     expect(onJump).toHaveBeenCalledWith(expected);
   });
 
@@ -460,9 +492,9 @@ describe("ThreadNavPanel", () => {
     const onJump = vi.fn();
     renderWithI18n(<Harness onJump={onJump} />);
     fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
-    const panel = screen.getByTestId("panel");
-    fireEvent.keyDown(panel, { key: "n" });
-    fireEvent.keyDown(panel, { key: "Enter" });
+    const search = screen.getByPlaceholderText("Search threads or authors");
+    fireEvent.keyDown(search, { key: "n" });
+    fireEvent.keyDown(search, { key: "Enter" });
     expect(onJump).toHaveBeenCalledWith("t1");
   });
 
@@ -470,10 +502,10 @@ describe("ThreadNavPanel", () => {
     const onJump = vi.fn();
     renderWithI18n(<Harness onJump={onJump} />);
     fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
-    const panel = screen.getByTestId("panel");
+    const search = screen.getByPlaceholderText("Search threads or authors");
     // Ctrl+Shift+N is the browser's incognito window, not our navigation.
-    fireEvent.keyDown(panel, { key: "n", ctrlKey: true, shiftKey: true });
-    fireEvent.keyDown(panel, { key: "Enter" });
+    fireEvent.keyDown(search, { key: "n", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(search, { key: "Enter" });
     expect(onJump).toHaveBeenCalledWith("t1");
   });
 
@@ -481,9 +513,9 @@ describe("ThreadNavPanel", () => {
     const onJump = vi.fn();
     renderWithI18n(<Harness onJump={onJump} />);
     fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
-    const panel = screen.getByTestId("panel");
-    fireEvent.keyDown(panel, { key: "ArrowUp" });
-    fireEvent.keyDown(panel, { key: "Enter" });
+    const search = screen.getByPlaceholderText("Search threads or authors");
+    fireEvent.keyDown(search, { key: "ArrowUp" });
+    fireEvent.keyDown(search, { key: "Enter" });
     expect(onJump).toHaveBeenCalledWith("t4");
   });
 
@@ -507,6 +539,58 @@ describe("ThreadNavPanel", () => {
     expect(screen.getByText("select")).toBeTruthy();
     expect(screen.getByText("jump")).toBeTruthy();
     expect(screen.getByText("close")).toBeTruthy();
+  });
+
+  // Enter used to be handled for every keydown bubbling up to the popup, and
+  // preventDefault on a button's keydown cancels the click the browser is about
+  // to synthesize — so Enter on a filter pill jumped away instead of filtering.
+  it("lets Enter activate a focused filter pill instead of jumping", () => {
+    const onJump = vi.fn();
+    const { container } = renderWithI18n(<Harness onJump={onJump} />);
+    fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
+    const resolved = screen.getByRole("button", { name: /^Resolved/ });
+    resolved.focus();
+    fireEvent.keyDown(resolved, { key: "Enter" });
+    // A real browser turns that keydown into a click on the focused button.
+    fireEvent.click(resolved);
+    expect(onJump).not.toHaveBeenCalled();
+    const rows = [...container.querySelectorAll("[data-thread-id]")].map((el) =>
+      el.getAttribute("data-thread-id"),
+    );
+    expect(rows).toEqual(["t3"]);
+  });
+
+  it("lets Enter activate a focused thread row rather than the cursor row", () => {
+    const onJump = vi.fn();
+    renderWithI18n(<Harness onJump={onJump} />);
+    fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
+    const row = screen.getByText("Expiry: 7 days or 14 days?").closest("button")!;
+    row.focus();
+    fireEvent.keyDown(row, { key: "Enter" });
+    fireEvent.click(row);
+    expect(onJump).toHaveBeenCalledTimes(1);
+    expect(onJump).toHaveBeenCalledWith("t3");
+  });
+
+  // CJK users commit an IME candidate with Enter. Acting on it jumped away and
+  // closed the panel mid-word, which makes the search field unusable for them.
+  it("ignores keys while an IME is composing", () => {
+    const onJump = vi.fn();
+    renderWithI18n(<Harness onJump={onJump} />);
+    fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
+    const search = screen.getByPlaceholderText("Search threads or authors");
+
+    fireEvent.keyDown(search, { key: "ArrowDown", isComposing: true });
+    fireEvent.keyDown(search, { key: "Enter", isComposing: true });
+    expect(onJump).not.toHaveBeenCalled();
+
+    // Some IMEs report the commit as keyCode 229 rather than isComposing.
+    fireEvent.keyDown(search, { key: "Enter", keyCode: 229 });
+    expect(onJump).not.toHaveBeenCalled();
+
+    // Composition over: Enter works again, and the cursor never moved.
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(onJump).toHaveBeenCalledWith("t1");
   });
 
   it("reports the hovered row so the rail can light the matching tick", () => {
