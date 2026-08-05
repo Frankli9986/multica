@@ -42,8 +42,8 @@ const (
 	// ChatAudienceUnknown is deliberately the zero value: uninitialized room
 	// context must never turn into a privacy claim.
 	ChatAudienceUnknown ChatAudience = iota
-	// ChatAudienceDirect — one reader, provably: an explicit p2p binding, or a
-	// web chat that has no channel behind it.
+	// ChatAudienceDirect — an explicit p2p binding, or the no-channel shape used
+	// by web chat. The claim protocol cannot distinguish a deleted binding here.
 	ChatAudienceDirect
 	// ChatAudienceGroup — a room shared by people the run has not been shown.
 	ChatAudienceGroup

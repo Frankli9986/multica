@@ -178,7 +178,7 @@ func TestClaim_UnboundSessionReportsNoChannelType(t *testing.T) {
 }
 
 // The room shape rides the same binding row as the channel type and must reach
-// the daemon with it. Without it the runtime brief has no way to know that one
+// the daemon with it. Without it the per-turn prompt has no way to know that one
 // chat_session is a room shared by many people, and it described every chat run
 // as a private 1:1 — the agent then had no input from which to weigh a wider
 // audience. Asserted per channel because the column is written by the shared
@@ -212,15 +212,16 @@ func TestClaim_BoundSessionReportsRoomShape(t *testing.T) {
 				t.Errorf("chat_channel_type = %q, want %q", claimed.ChannelType, tc.channelType)
 			}
 			if claimed.ChatType != tc.chatType {
-				t.Errorf("chat_type = %q, want %q — the brief cannot describe a room it is not told about", claimed.ChatType, tc.chatType)
+				t.Errorf("chat_type = %q, want %q — the prompt cannot describe a room it is not told about", claimed.ChatType, tc.chatType)
 			}
 		})
 	}
 }
 
-// A web chat has no binding row, so there is no room shape to report. It must
-// come back empty rather than defaulting to "p2p": the brief treats an unknown
-// shape as "claim no audience", and a guessed default would defeat that.
+// A web chat has no binding row, so there is no room shape to report. It comes
+// back empty rather than fabricating "p2p": AudienceOf pairs that empty shape
+// with an empty channel to infer web direct, while an external channel whose
+// shape is empty remains unknown.
 func TestClaim_UnboundSessionReportsNoRoomShape(t *testing.T) {
 	if testHandler == nil {
 		t.Skip("database not available")

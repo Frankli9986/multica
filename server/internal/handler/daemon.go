@@ -2139,8 +2139,8 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 			// to select between there and must not imply one exists.
 			//
 			// chat_type rides along on the same row. It is what lets the
-			// runtime brief tell the agent whether this chat_session is a room
-			// shared by many people or a 1:1 with the bot; the brief used to
+			// per-turn prompt tell the agent whether this chat_session is a room
+			// shared by many people or a 1:1 with the bot; the prompt used to
 			// describe every chat run as a private 1:1 whatever the room. The
 			// shared session service writes the column for every channel
 			// (channel/engine/session.go), so no channel needs naming here
