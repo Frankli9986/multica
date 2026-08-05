@@ -331,11 +331,10 @@
         "yesterday": "昨日",
         "earlier": "それ以前"
       },
-      "current": "現在の位置",
       "empty": "一致するスレッドはありません",
-      "hint_select": "↑↓ 選択",
-      "hint_jump": "↵ 移動",
-      "hint_close": "esc 閉じる"
+      "hint_select": "選択",
+      "hint_jump": "移動",
+      "hint_close": "閉じる"
     },
     "sidebar_tooltip": "サイドバーの開閉",
     "find": {

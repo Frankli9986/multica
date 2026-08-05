@@ -149,7 +149,6 @@ function Harness({
   return (
     <ThreadNavPanel
       threads={threads}
-      scrollContainerEl={null}
       onJump={onJump}
       onHoverThread={onHoverThread}
       open={state.open}
@@ -448,6 +447,28 @@ describe("ThreadNavPanel", () => {
     fireEvent.keyDown(panel, { key: "ArrowUp" });
     fireEvent.keyDown(panel, { key: "Enter" });
     expect(onJump).toHaveBeenCalledWith("t4");
+  });
+
+  // The panel used to mark every thread inside the scroll viewport as "you are
+  // here". A tall viewport holds several at once, so the marker landed on two or
+  // three rows and read as a broken multi-select; absolute position is the
+  // rail's job now. Guard against it coming back.
+  it("marks no row as a current position", () => {
+    const { container } = renderWithI18n(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
+    expect(screen.queryByText(/you are here/i)).toBeNull();
+    expect(container.querySelector(".bg-brand")).toBeNull();
+  });
+
+  it("renders the keyboard hints as real keycaps, not glyphs in a string", () => {
+    const { container } = renderWithI18n(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
+    const keycaps = container.querySelectorAll('[data-slot="shortcut-keycaps"]');
+    // Up, Down, Enter, Escape.
+    expect(keycaps).toHaveLength(4);
+    expect(screen.getByText("select")).toBeTruthy();
+    expect(screen.getByText("jump")).toBeTruthy();
+    expect(screen.getByText("close")).toBeTruthy();
   });
 
   it("reports the hovered row so the rail can light the matching tick", () => {

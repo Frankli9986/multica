@@ -331,11 +331,10 @@
         "yesterday": "昨天",
         "earlier": "更早"
       },
-      "current": "当前位置",
       "empty": "没有匹配的讨论",
-      "hint_select": "↑↓ 选择",
-      "hint_jump": "↵ 跳转",
-      "hint_close": "esc 关闭"
+      "hint_select": "选择",
+      "hint_jump": "跳转",
+      "hint_close": "关闭"
     },
     "sidebar_tooltip": "切换侧边栏",
     "find": {

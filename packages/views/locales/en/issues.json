@@ -336,11 +336,10 @@
         "yesterday": "Yesterday",
         "earlier": "Earlier"
       },
-      "current": "You are here",
       "empty": "No threads match",
-      "hint_select": "↑↓ select",
-      "hint_jump": "↵ jump",
-      "hint_close": "esc close"
+      "hint_select": "select",
+      "hint_jump": "jump",
+      "hint_close": "close"
     },
     "sidebar_tooltip": "Toggle sidebar",
     "find": {

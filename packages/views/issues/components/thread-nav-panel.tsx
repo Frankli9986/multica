@@ -11,10 +11,16 @@ import {
 } from "@multica/ui/components/ui/popover";
 import { Button } from "@multica/ui/components/ui/button";
 import { cn } from "@multica/ui/lib/utils";
+import { createShortcutChord, getShortcut } from "@multica/core/shortcuts";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@multica/ui/components/ui/tooltip";
 import { ActorAvatar } from "../../common/actor-avatar";
+import { ShortcutKeycaps } from "../../common/shortcut-keycaps";
 import { useT } from "../../i18n";
 import { commentPreview } from "./thread-minimap";
-import { useVisibleThreadIds } from "./use-visible-threads";
 
 // ---------------------------------------------------------------------------
 // ThreadNavPanel — header entry point for jumping between comment threads
@@ -28,10 +34,13 @@ import { useVisibleThreadIds } from "./use-visible-threads";
 // time — and search/filter make 24 threads and 240 threads cost the same
 // (MUL-5755).
 //
-// The two navigators are deliberately kept as one coordinate system rather
-// than two competing lists: both derive "where am I" from the same
-// `useVisibleThreadIds`, and hovering a row here lights that thread's tick on
-// the rail.
+// The panel deliberately does NOT mark which threads are currently on screen.
+// "On screen" is a set, not a point — a tall viewport holds several threads at
+// once, so the marker landed on two or three rows simultaneously and read as a
+// broken multi-select rather than as a position. Absolute position is the
+// rail's job, where a column of ticks can show a span honestly; the panel's job
+// is finding. Hovering a row still lights that thread's tick on the rail, which
+// links the two without duplicating the rail's answer.
 //
 // Open model — hover previews, press pins:
 //
@@ -56,6 +65,13 @@ const HOVER_OPEN_DELAY_MS = 200;
 const HOVER_CLOSE_DELAY_MS = 200;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Footer hint keys. Built as real chords so ShortcutKeycaps renders each one
+// with the platform's own glyph and keycap chrome.
+const KEY_UP = createShortcutChord("Up");
+const KEY_DOWN = createShortcutChord("Down");
+const KEY_ENTER = createShortcutChord("Enter");
+const KEY_ESCAPE = createShortcutChord("Escape");
 
 export type ThreadNavFilter = "all" | "unresolved" | "resolved" | "mine";
 
@@ -163,15 +179,12 @@ export function highlightMatches(text: string, query: string): ReactNode {
 
 function ThreadRow({
   prepared,
-  isCurrent,
   isActive,
   query,
   onJump,
   onHover,
 }: {
   prepared: PreparedThread;
-  /** This thread is in the reader's viewport right now. */
-  isCurrent: boolean;
   /** Keyboard cursor is on this row. */
   isActive: boolean;
   /** Active search term, tinted inside the title and excerpt. */
@@ -192,18 +205,8 @@ function ThreadRow({
       className={cn(
         "relative flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors",
         "hover:bg-surface-hover data-active:bg-surface-hover",
-        // The current-position row must stay identifiable while hovered, so it
-        // keeps a dimension hover does not touch: the brand rail on its left
-        // edge (UI rule on active-vs-hover states).
-        isCurrent && "bg-surface-selected hover:bg-surface-selected data-active:bg-surface-selected",
       )}
     >
-      {isCurrent && (
-        <span
-          aria-hidden="true"
-          className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-brand"
-        />
-      )}
       <ActorAvatar
         actorType={thread.entry.actor_type}
         actorId={thread.entry.actor_id}
@@ -221,11 +224,6 @@ function ThreadRow({
           >
             {highlightMatches(title, query)}
           </span>
-          {isCurrent && (
-            <span className="shrink-0 text-micro font-medium text-brand">
-              {t(($) => $.detail.thread_nav.current)}
-            </span>
-          )}
           <span className="shrink-0 text-micro tabular-nums text-faint-foreground">
             {prepared.thread.entry.created_at ? formatClock(prepared.thread.entry.created_at) : ""}
           </span>
@@ -272,8 +270,6 @@ function formatClock(createdAt: string): string {
 
 interface ThreadNavPanelProps {
   threads: ThreadNavThread[];
-  /** The issue detail scroll container; null until its callback ref populates. */
-  scrollContainerEl: HTMLElement | null;
   onJump: (threadId: string) => void;
   /** Lights the matching tick on the right-edge rail. */
   onHoverThread: (threadId: string | null) => void;
@@ -286,7 +282,6 @@ interface ThreadNavPanelProps {
 
 export function ThreadNavPanel({
   threads,
-  scrollContainerEl,
   onJump,
   onHoverThread,
   open,
@@ -296,16 +291,12 @@ export function ThreadNavPanel({
   const { t } = useT("issues");
   const { getActorName } = useActorName();
 
+  const [tooltipOpen, setTooltipOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ThreadNavFilter>("all");
   const [activeIndex, setActiveIndex] = useState(0);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-
-  const threadIds = useMemo(() => threads.map((th) => th.id), [threads]);
-  // Only track the viewport while the panel is showing — the rail already
-  // runs this pass continuously for its own ticks.
-  const visibleIds = useVisibleThreadIds(threadIds, scrollContainerEl, open);
 
   // Previews are cached by content so an unrelated timeline update (a reaction,
   // a reply in another thread) doesn't re-flatten every root comment.
@@ -359,18 +350,16 @@ export function ThreadNavPanel({
     [threads],
   );
 
-  // Opening lands the cursor on where the reader already is, so ↵ without any
-  // other input is a no-op jump rather than a surprise trip to the top.
-  const currentIndex = rows.findIndex((row) => visibleIds.has(row.thread.id));
+  // Each opening starts clean: no carried-over query, filter, or cursor.
   const openRef = useRef(open);
   useEffect(() => {
     if (open && !openRef.current) {
       setQuery("");
       setFilter("all");
-      setActiveIndex(currentIndex >= 0 ? currentIndex : 0);
+      setActiveIndex(0);
     }
     openRef.current = open;
-  }, [open, currentIndex]);
+  }, [open]);
 
   // Filtering shrinks the list under the cursor; clamp instead of leaving it
   // pointing past the end, where ↵ would do nothing.
@@ -461,6 +450,10 @@ export function ThreadNavPanel({
 
   if (threads.length < MIN_THREADS) return null;
 
+  const buttonLabel = t(($) => $.detail.thread_nav.button_label, { count: threads.length });
+  // Read at render so a rebind in Settings shows up without a reload.
+  const openShortcut = getShortcut("openThreadNav");
+
   const filterPills: { id: ThreadNavFilter; label: string; count: number }[] = [
     { id: "all", label: t(($) => $.detail.thread_nav.filter_all), count: counts.all },
     { id: "unresolved", label: t(($) => $.detail.thread_nav.filter_unresolved), count: counts.unresolved },
@@ -473,24 +466,41 @@ export function ThreadNavPanel({
       {/* Base UI puts the hover config on the Trigger, not the Root (a popover
           may have several triggers). The trigger stays a real button so press
           and keyboard still work for touch and a11y. */}
-      <PopoverTrigger
-        openOnHover
-        delay={HOVER_OPEN_DELAY_MS}
-        closeDelay={HOVER_CLOSE_DELAY_MS}
-        render={
-          <Button
-            variant={open ? "secondary" : "ghost"}
-            size="sm"
-            aria-label={t(($) => $.detail.thread_nav.button_label, { count: threads.length })}
-            className={cn("h-7 gap-1.5 px-2", !open && "text-muted-foreground")}
-          />
-        }
-      >
-        {/* Explicit `size-4` so the icon matches the neighbouring header
-            action buttons instead of the `sm` button's smaller default. */}
-        <MessagesSquare className="size-4" />
-        <span className="text-caption font-medium tabular-nums">{threads.length}</span>
-      </PopoverTrigger>
+      {/* Tooltip like every other control in this header, and the only place
+          the open shortcut is discoverable — same label + keycaps shape the
+          chat launcher uses. Held controlled for its whole life (never
+          `undefined`, which would flip it uncontrolled mid-flight) and forced
+          shut while the panel is open, so the tip never sits on top of it. */}
+      <Tooltip open={tooltipOpen && !open} onOpenChange={setTooltipOpen}>
+        <TooltipTrigger
+          render={
+            <PopoverTrigger
+              openOnHover
+              delay={HOVER_OPEN_DELAY_MS}
+              closeDelay={HOVER_CLOSE_DELAY_MS}
+              render={
+                <Button
+                  variant={open ? "secondary" : "ghost"}
+                  size="sm"
+                  aria-label={buttonLabel}
+                  className={cn("h-7 gap-1.5 px-2", !open && "text-muted-foreground")}
+                />
+              }
+            >
+              {/* Explicit `size-4` so the icon matches the neighbouring header
+                  action buttons instead of the `sm` button's smaller default. */}
+              <MessagesSquare className="size-4" />
+              <span className="text-caption font-medium tabular-nums">{threads.length}</span>
+            </PopoverTrigger>
+          }
+        />
+        <TooltipContent side="bottom">
+          {buttonLabel}
+          {openShortcut ? (
+            <ShortcutKeycaps shortcut={openShortcut} decorative className="ml-1.5" />
+          ) : null}
+        </TooltipContent>
+      </Tooltip>
       <PopoverContent
         align="end"
         // Step inside the right-edge rail's 32px strip so the two navigators
@@ -575,7 +585,6 @@ export function ThreadNavPanel({
                   )}
                   <ThreadRow
                     prepared={row}
-                    isCurrent={visibleIds.has(row.thread.id)}
                     isActive={i === activeIndex}
                     query={query}
                     onJump={() => jump(row.thread.id)}
@@ -587,10 +596,26 @@ export function ThreadNavPanel({
           )}
         </div>
 
-        <div className="flex h-7 shrink-0 items-center gap-2.5 border-t border-border px-2.5 text-micro text-faint-foreground">
-          <span>{t(($) => $.detail.thread_nav.hint_select)}</span>
-          <span>{t(($) => $.detail.thread_nav.hint_jump)}</span>
-          <span>{t(($) => $.detail.thread_nav.hint_close)}</span>
+        {/* Keycaps come from the shared ShortcutKeycaps, so these read as the
+            same keys the sidebar, command palette, and confirm dialogs draw —
+            real keycap chrome and the platform's own glyphs, not arrows typed
+            into a translation string. */}
+        <div className="flex h-8 shrink-0 items-center gap-3 border-t border-border px-2.5 text-micro text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-0.5">
+              <ShortcutKeycaps shortcut={KEY_UP} />
+              <ShortcutKeycaps shortcut={KEY_DOWN} />
+            </span>
+            {t(($) => $.detail.thread_nav.hint_select)}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <ShortcutKeycaps shortcut={KEY_ENTER} />
+            {t(($) => $.detail.thread_nav.hint_jump)}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <ShortcutKeycaps shortcut={KEY_ESCAPE} />
+            {t(($) => $.detail.thread_nav.hint_close)}
+          </span>
         </div>
       </PopoverContent>
     </Popover>

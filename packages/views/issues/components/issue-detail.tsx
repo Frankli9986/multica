@@ -2425,7 +2425,6 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
             {!isMobile && (
               <ThreadNavPanel
                 threads={minimapThreads}
-                scrollContainerEl={scrollContainerEl}
                 onJump={jumpToThread}
                 onHoverThread={setThreadNavHoverId}
                 open={threadNavOpen}

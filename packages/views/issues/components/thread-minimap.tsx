@@ -4,7 +4,6 @@ import type { TimelineEntry } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../../i18n";
-import { useVisibleThreadIds } from "./use-visible-threads";
 
 // ---------------------------------------------------------------------------
 // ThreadMinimap — Linear-style quick-jump rail for comment threads
@@ -135,6 +134,70 @@ interface ThreadMinimapProps {
   highlightedThreadId?: string | null;
   /** Positioning within the page (e.g. `absolute right-3 top-12 bottom-0`) — owned by the caller, like FindBar. */
   className?: string;
+}
+
+// ---------------------------------------------------------------------------
+// useVisibleThreadIds — "which comment threads are on screen right now"
+// ---------------------------------------------------------------------------
+//
+// Which threads intersect the scroll viewport, so the rail can darken their
+// ticks. Deliberately the rail's alone: "on screen" is a set, not a point, and
+// only a column of ticks can show a span honestly — the header panel tried to
+// render the same set as list rows and it read as a broken multi-select.
+//
+// Computed from DOM rects on scroll/resize instead of an IntersectionObserver
+// because Virtuoso mounts/unmounts rows while scrolling — an observer would
+// lose its targets. Unmounted rows are by definition outside the (overscanned)
+// viewport, so "no element" correctly counts as not visible.
+
+function sameIdSet(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
+function useVisibleThreadIds(
+  threadIds: readonly string[],
+  scrollContainerEl: HTMLElement | null,
+): Set<string> {
+  const [visibleIds, setVisibleIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    const container = scrollContainerEl;
+    if (!container) return;
+
+    let raf = 0;
+    const compute = () => {
+      raf = 0;
+      const rect = container.getBoundingClientRect();
+      const next = new Set<string>();
+      for (const id of threadIds) {
+        const el = document.getElementById(`comment-${id}`);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (r.bottom > rect.top && r.top < rect.bottom) next.add(id);
+      }
+      setVisibleIds((prev) => (sameIdSet(prev, next) ? prev : next));
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(compute);
+    };
+
+    compute();
+    container.addEventListener("scroll", schedule, { passive: true });
+    // Content height changes without scroll events: Virtuoso mounting rows
+    // after first paint, streamed agent replies growing, window resizes.
+    const ro = new ResizeObserver(schedule);
+    ro.observe(container);
+    if (container.firstElementChild) ro.observe(container.firstElementChild);
+    return () => {
+      container.removeEventListener("scroll", schedule);
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [threadIds, scrollContainerEl]);
+
+  return visibleIds;
 }
 
 /** The rail-owned preview card's target: which tick, anchored at which shim-relative Y. */
