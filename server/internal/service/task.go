@@ -2177,6 +2177,11 @@ func chatInputOwnerID(task db.AgentTaskQueue) pgtype.UUID {
 // newly-visible queued direct head in the caller's transaction. Keeping the two
 // statements together is the transcript-order boundary: readers must not see
 // the reply commit while the next head still carries its older enqueue time.
+// The caller MUST observe the settling task outside the visible-head status set
+// before invoking this helper; completion and failure settle it earlier in the
+// same transaction, while cancellation commits that status in its prior
+// transaction (#5219). Otherwise the head query still selects the settling task
+// and reanchoring its successor is a no-op.
 func createAssistantChatMessage(ctx context.Context, qtx *db.Queries, params db.CreateChatMessageParams) (db.ChatMessage, error) {
 	if params.Role != "assistant" {
 		return db.ChatMessage{}, fmt.Errorf("create assistant chat message: invalid role %q", params.Role)

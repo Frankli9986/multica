@@ -60,6 +60,16 @@ func markTaskRunning(t *testing.T, ctx context.Context, taskID string) {
 	}
 }
 
+func insertTaskTranscriptRow(t *testing.T, ctx context.Context, taskID string) {
+	t.Helper()
+	if _, err := testPool.Exec(ctx, `
+		INSERT INTO task_message (task_id, seq, type, content)
+		VALUES ($1, 1, 'text', 'partial output')
+	`, taskID); err != nil {
+		t.Fatalf("insert task transcript row: %v", err)
+	}
+}
+
 func completeResult(t *testing.T, output string) []byte {
 	t.Helper()
 	b, err := json.Marshal(TaskCompleteRequest{Output: output})
@@ -531,6 +541,68 @@ func TestFailTask_ChatFailureKeepsNextTurnAfterOutcome(t *testing.T) {
 		t.Fatalf("list failed-turn transcript: %v", err)
 	}
 	assertChatTranscriptContents(t, transcript, []string{"user A", "assistant failure", "user B"})
+}
+
+// Cancellation finalization intentionally happens after the cancellation
+// transaction (#5219), so this test pins the eventual transcript order rather
+// than claiming cursor stability during that post-commit window. When output
+// is already durable, finalization is synchronous and the visible result must
+// still pair the cancelled turn with Stopped. before exposing its successor.
+func TestCancelTask_ChatStoppedKeepsNextTurnAfterOutcome(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("database not available")
+	}
+	ctx := context.Background()
+	agentID, sessionID, _, _ := setupDirectChatSession(t, ctx, "cancelled turn order")
+	t1 := sendDirectChat(t, ctx, agentID, sessionID, "user A")
+	sendDirectChat(t, ctx, agentID, sessionID, "user B")
+	markTaskRunning(t, ctx, t1)
+	insertTaskTranscriptRow(t, ctx, t1)
+
+	if _, err := testHandler.TaskService.CancelTaskWithResult(ctx, parseUUID(t1), service.CancelTaskOptions{ClientSupportsDraftRestore: true}); err != nil {
+		t.Fatalf("cancel turn A: %v", err)
+	}
+	transcript, err := testHandler.Queries.ListChatMessages(ctx, parseUUID(sessionID))
+	if err != nil {
+		t.Fatalf("list synchronously cancelled transcript: %v", err)
+	}
+	assertChatTranscriptContents(t, transcript, []string{"user A", "Stopped.", "user B"})
+}
+
+// A started task with no durable output defers its empty/non-empty judgment
+// until the daemon ack or sweeper. During that intentional transient, the next
+// queued turn can be visible at its enqueue position. Once late output lands,
+// deferred finalization must produce the same stable final order as the
+// synchronous path.
+func TestCancelTask_DeferredStoppedKeepsNextTurnAfterOutcome(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("database not available")
+	}
+	ctx := context.Background()
+	agentID, sessionID, _, _ := setupDirectChatSession(t, ctx, "deferred cancelled turn order")
+	t1 := sendDirectChat(t, ctx, agentID, sessionID, "user A")
+	sendDirectChat(t, ctx, agentID, sessionID, "user B")
+	markTaskRunning(t, ctx, t1)
+
+	if _, err := testHandler.TaskService.CancelTaskWithResult(ctx, parseUUID(t1), service.CancelTaskOptions{ClientSupportsDraftRestore: true}); err != nil {
+		t.Fatalf("cancel turn A: %v", err)
+	}
+	transcript, err := testHandler.Queries.ListChatMessages(ctx, parseUUID(sessionID))
+	if err != nil {
+		t.Fatalf("list deferred cancellation transient: %v", err)
+	}
+	assertChatTranscriptContents(t, transcript, []string{"user A", "user B"})
+
+	// Simulate output flushed after the cancellation commit, then settle the
+	// deferred marker as the daemon acknowledgement or sweeper would.
+	insertTaskTranscriptRow(t, ctx, t1)
+	testHandler.TaskService.FinalizeDeferredCancelledChat(ctx, parseUUID(t1))
+
+	transcript, err = testHandler.Queries.ListChatMessages(ctx, parseUUID(sessionID))
+	if err != nil {
+		t.Fatalf("list deferred cancelled transcript: %v", err)
+	}
+	assertChatTranscriptContents(t, transcript, []string{"user A", "Stopped.", "user B"})
 }
 
 // ---- helpers ----
