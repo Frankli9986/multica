@@ -6,6 +6,7 @@ import { ChevronRight, Loader2, RotateCcw, Square } from "lucide-react";
 import { toast } from "sonner";
 import { api, dispatchReasonCode } from "@multica/core/api";
 import { issueKeys } from "@multica/core/issues/queries";
+import { useCustomPricingStore } from "@multica/core/runtimes/custom-pricing-store";
 import type { AgentTask } from "@multica/core/types";
 import { useTimeAgo } from "../../i18n";
 import {
@@ -210,7 +211,7 @@ export function ExecutionLogSection({ issueId, identifier }: ExecutionLogSection
 // Renders nothing when no run on the issue has recorded usage — an issue whose
 // runs all predate usage reporting gets its old header back rather than a
 // "0 · $0.00" that would read as "this was free".
-function IssueUsageTotal({
+export function IssueUsageTotal({
   tasks,
   alone,
   onOpen,
@@ -220,9 +221,14 @@ function IssueUsageTotal({
   onOpen: () => void;
 }) {
   const { t } = useT("issues");
+  // Custom rates are read imperatively inside `estimateCost`, so a saved rate
+  // change does not re-render this on its own — subscribe and make the memo
+  // depend on the snapshot, or the header total keeps quoting the old price
+  // until the task list refetches.
+  const pricings = useCustomPricingStore((s) => s.pricings);
   const total = useMemo(
     () => summarizeTaskUsageAcross(tasks.map((task) => task.usage)),
-    [tasks],
+    [tasks, pricings],
   );
   if (!total) return null;
 
@@ -319,12 +325,13 @@ export function ActiveTaskRow({
     setConfirmOpen(true);
   };
 
-  // Tokens burned so far. A run that has not reported any usage yet keeps the
-  // bare timer rather than showing an em dash next to it — mid-run, "no figure
-  // yet" and "no figure ever" are not the same claim, and only the timer can
-  // tell them apart.
-  const usage = summarizeTaskUsage(task.usage);
-
+  // Deliberately no token figure on an active row: the daemon reports usage
+  // once, after `runner.run` returns (server/internal/daemon/daemon.go), and
+  // the write publishes no realtime event — so a running task has no usage to
+  // show, and would not learn of it mid-run if it did. Rendering the branch
+  // anyway would only ever be exercised by hand-written fixtures, which is a
+  // test that asserts a scenario production cannot produce. Restore it in the
+  // same change that adds incremental reporting + cache invalidation.
   return (
     <RowShell task={task}>
       <TriggerText text={trigger} />
@@ -332,12 +339,6 @@ export function ActiveTaskRow({
       <RowStatus title={label}>
         {task.status === "running" ? (
           <>
-            {usage && (
-              <>
-                <span className="tabular-nums">{formatTokens(usage.tokens)}</span>
-                <span className="text-faint-foreground">·</span>
-              </>
-            )}
             <span className="text-info tabular-nums">{elapsed}</span>
             <span className="sr-only">{label}</span>
           </>

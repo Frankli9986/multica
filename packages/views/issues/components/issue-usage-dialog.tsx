@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@multica/ui/components/ui/dialog";
 import { useActorName } from "@multica/core/workspace/hooks";
+import { useCustomPricingStore } from "@multica/core/runtimes/custom-pricing-store";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { useT } from "../../i18n";
 import { formatDuration } from "../../agents/components/agent-activity-hover-content";
@@ -22,7 +23,7 @@ import {
   type TaskUsageSummary,
 } from "../../runtimes/utils";
 import { KpiCard } from "../../runtimes/components/shared";
-import { useTriggerText } from "./task-run-labels";
+import { useStatusLabel, useTriggerText } from "./task-run-labels";
 import { TaskStatusIcon } from "./task-status-icon";
 
 // Per-run cost breakdown for one issue — the surface the execution log's
@@ -48,6 +49,13 @@ export function IssueUsageDialog({
   tasks: AgentTask[];
 }) {
   const { t } = useT("issues");
+  // `estimateCost` reads custom rates imperatively out of the Zustand store,
+  // so nothing re-renders this dialog when the user saves a new rate. Subscribe
+  // to the snapshot and carry it into every memo that prices usage — otherwise
+  // the totals, the per-run costs, and the "unmapped model" notice all keep
+  // showing the old price until the task list happens to refetch. Same reason
+  // the runtime usage page subscribes in usage-section.tsx.
+  const pricings = useCustomPricingStore((s) => s.pricings);
 
   // Only runs that actually recorded usage earn a row: a run with no figure
   // contributes nothing to compare and would just add an all-em-dash line.
@@ -60,7 +68,7 @@ export function IssueUsageDialog({
 
   const total = useMemo(
     () => summarizeTaskUsageAcross(priced.map((task) => task.usage)),
-    [priced],
+    [priced, pricings],
   );
 
   const agentIds = useMemo(
@@ -73,7 +81,7 @@ export function IssueUsageDialog({
   // reality. Saying so is the difference between an estimate and a wrong number.
   const unmapped = useMemo(
     () => collectUnmappedModels(priced.flatMap((task) => task.usage ?? [])),
-    [priced],
+    [priced, pricings],
   );
 
   const cacheHitRate =
@@ -196,6 +204,7 @@ function CostByAgent({
 }) {
   const { t } = useT("issues");
   const { getActorName } = useActorName();
+  const pricings = useCustomPricingStore((s) => s.pricings);
 
   const rows = useMemo(() => {
     return agentIds
@@ -205,7 +214,7 @@ function CostByAgent({
         return { agentId, cost: summary?.cost ?? 0, tokens: summary?.tokens ?? 0 };
       })
       .toSorted((a, b) => b.cost - a.cost);
-  }, [agentIds, tasks]);
+  }, [agentIds, tasks, pricings]);
 
   const maxCost = rows.reduce((m, r) => Math.max(m, r.cost), 0);
 
@@ -299,6 +308,7 @@ function RunTable({ tasks, total }: { tasks: AgentTask[]; total: TaskUsageSummar
 function RunRow({ task, maxTokens }: { task: AgentTask; maxTokens: number }) {
   const { t } = useT("issues");
   const trigger = useTriggerText(task);
+  const statusLabel = useStatusLabel(task.status);
   const summary = summarizeTaskUsage(task.usage);
   if (!summary) return null;
 
@@ -319,7 +329,14 @@ function RunRow({ task, maxTokens }: { task: AgentTask; maxTokens: number }) {
               {t(($) => $.execution_log.status_running)}
             </span>
           ) : (
-            <TaskStatusIcon status={task.status} />
+            <>
+              {/* TaskStatusIcon is aria-hidden, so the glyph alone leaves a
+                  screen reader with no way to tell a failed run from a
+                  completed one. Same sr-only pairing the execution log rows
+                  use. */}
+              <TaskStatusIcon status={task.status} />
+              <span className="sr-only">{statusLabel}</span>
+            </>
           )}
         </div>
       </td>

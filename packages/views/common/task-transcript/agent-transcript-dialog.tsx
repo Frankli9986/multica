@@ -49,6 +49,7 @@ import {
 } from "@multica/core/agents/stores";
 import type { AgentTask, Agent, AgentRuntime } from "@multica/core/types/agent";
 import { runtimeDisplayName } from "@multica/core/runtimes";
+import { useCustomPricingStore } from "@multica/core/runtimes/custom-pricing-store";
 import { redactSecrets } from "./redact";
 import {
   createNewestFirstFollow,
@@ -623,6 +624,11 @@ export function AgentTranscriptDialog({
   // This run's own spend. Present on transcripts opened from the issue
   // execution log (the endpoint that hydrates usage); absent elsewhere, where
   // the chip and the usage rows below simply don't render.
+  //
+  // `summarizeTaskUsage` prices through the custom-rate store, which it reads
+  // imperatively — subscribing here is what makes a saved rate change reach
+  // this figure, same as on the other usage surfaces.
+  useCustomPricingStore((s) => s.pricings);
   const usage = summarizeTaskUsage(task.usage);
   const hasRunDetails =
     !!runtimeInfo ||
