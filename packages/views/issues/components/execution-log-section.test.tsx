@@ -28,6 +28,7 @@ vi.mock("./terminate-task-confirm-dialog", () => ({
 }));
 
 import { ActiveTaskRow, TaskCommentCoverage } from "./execution-log-section";
+import type { TaskUsage } from "@multica/core/types";
 
 function makeTask(overrides: Partial<AgentTask> = {}): AgentTask {
   return {
@@ -214,5 +215,42 @@ describe("TaskCommentCoverage", () => {
     );
 
     expect(screen.getByText("包含 3 条评论")).toBeInTheDocument();
+  });
+});
+
+// claude-opus-5 at 5 / 25 / 0.50 / 6.25 per million.
+function usageSlice(overrides: Partial<TaskUsage> = {}): TaskUsage {
+  return {
+    provider: "anthropic",
+    model: "claude-opus-5",
+    input_tokens: 96_000,
+    output_tokens: 34_000,
+    cache_read_tokens: 712_000,
+    cache_write_tokens: 50_000,
+    ...overrides,
+  };
+}
+
+describe("per-run token usage", () => {
+  it("shows a running row's tokens ahead of its live timer", () => {
+    renderWithI18n(
+      <ActiveTaskRow
+        task={makeTask({ usage: [usageSlice()] })}
+        issueId="issue-1"
+      />,
+    );
+
+    expect(screen.getByText("892K")).toBeInTheDocument();
+    // The timer is what says the run is alive; the token figure joins it
+    // rather than replacing it.
+    expect(screen.getByText("5m 04s")).toBeInTheDocument();
+  });
+
+  it("keeps a running row's bare timer when no usage has been reported yet", () => {
+    renderWithI18n(<ActiveTaskRow task={makeTask()} issueId="issue-1" />);
+
+    expect(screen.getByText("5m 04s")).toBeInTheDocument();
+    // Mid-run, "no figure yet" is not a claim worth making — no em dash.
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 });
