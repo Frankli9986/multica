@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { CheckCircle2, MessageSquare, MessagesSquare, Search } from "lucide-react";
 import type { TimelineEntry } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -11,7 +11,7 @@ import {
 } from "@multica/ui/components/ui/popover";
 import { Button } from "@multica/ui/components/ui/button";
 import { cn } from "@multica/ui/lib/utils";
-import { createShortcutChord, getShortcut } from "@multica/core/shortcuts";
+import { createShortcutChord, useShortcut } from "@multica/core/shortcuts";
 import { preprocessMentionShortcodes } from "@multica/core/markdown";
 import { isImeComposing } from "@multica/core/utils";
 import {
@@ -188,6 +188,7 @@ export function highlightMatches(text: string, query: string): ReactNode {
 function ThreadRow({
   prepared,
   isActive,
+  optionId,
   query,
   onJump,
   onHover,
@@ -195,6 +196,8 @@ function ThreadRow({
   prepared: PreparedThread;
   /** Keyboard cursor is on this row. */
   isActive: boolean;
+  /** Stable DOM id so the search field can point at this row. */
+  optionId: string;
   /** Active search term, tinted inside the title and excerpt. */
   query: string;
   onJump: () => void;
@@ -205,6 +208,15 @@ function ThreadRow({
   return (
     <button
       type="button"
+      // Not a tab stop, and role=option: the search field keeps DOM focus and
+      // names this row through aria-activedescendant. Leaving the rows
+      // focusable produced two cursors — Tab to row 3, ArrowDown highlights
+      // row 2, Enter clicks row 3 — because DOM focus and the highlight were
+      // separate pieces of state with nothing keeping them in step.
+      tabIndex={-1}
+      role="option"
+      id={optionId}
+      aria-selected={isActive}
       data-thread-id={thread.id}
       data-active={isActive || undefined}
       onClick={onJump}
@@ -303,6 +315,12 @@ export function ThreadNavPanel({
 }: ThreadNavPanelProps) {
   const { t } = useT("issues");
   const { getActorName } = useActorName();
+  // Subscribed, not snapshotted: `getShortcut` reads the store once with no
+  // subscription, so a rebind in Settings left this tooltip showing the old
+  // key while the actual keydown handler already used the new one.
+  const openShortcutChord = useShortcut("openThreadNav");
+  const listId = useId();
+  const optionId = useCallback((threadId: string) => `${listId}-${threadId}`, [listId]);
 
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -447,6 +465,12 @@ export function ThreadNavPanel({
       // the moment a CJK user picked a candidate — the search field is the one
       // place in this panel people type prose.
       if (isImeComposing(e)) return;
+      // The search field owns the list keyboard, arrows included. Letting the
+      // arrows fire from anywhere in the popup while Enter fired only from the
+      // search field was the worst of both: focus on a filter pill, ArrowDown
+      // moved the highlight, and Enter then activated the pill — two cursors,
+      // disagreeing.
+      if (e.target !== searchRef.current) return;
       // Arrow keys plus the Ctrl+N/J and Ctrl+P/K aliases, from the same policy
       // the editor's pickers use — which in turn mirrors what cmdk's
       // `vimBindings` gives the command bar for free. One list-with-a-highlight
@@ -462,14 +486,11 @@ export function ThreadNavPanel({
         setActiveIndex((prev) => (prev + step + rows.length) % rows.length);
         return;
       }
-      // Enter belongs to the search field alone. The handler sits on the popup
-      // so navigation works from anywhere inside it, which means a child
-      // button's Enter also bubbles here — and `preventDefault` on a button's
-      // keydown cancels the click the browser was about to synthesize. Handling
-      // it unconditionally therefore made the filter pills and the rows
-      // impossible to activate by keyboard: Enter on "Resolved" jumped to the
-      // active row and closed the panel instead of filtering.
-      if (e.key === "Enter" && e.target === searchRef.current) {
+      // Enter is gated by the same target check above, which is what keeps the
+      // filter pills activatable: `preventDefault` on a button's keydown
+      // cancels the click the browser was about to synthesize, so handling
+      // Enter for the whole popup made "Resolved" jump instead of filter.
+      if (e.key === "Enter") {
         const row = rows[activeIndex];
         if (!row) return;
         e.preventDefault();
@@ -488,8 +509,7 @@ export function ThreadNavPanel({
   if (threads.length < MIN_THREADS) return null;
 
   const buttonLabel = t(($) => $.detail.thread_nav.button_label, { count: threads.length });
-  // Read at render so a rebind in Settings shows up without a reload.
-  const openShortcut = getShortcut("openThreadNav");
+  const openShortcut = openShortcutChord;
 
   const filterPills: { id: ThreadNavFilter; label: string; count: number }[] = [
     { id: "all", label: t(($) => $.detail.thread_nav.filter_all), count: counts.all },
@@ -560,6 +580,10 @@ export function ThreadNavPanel({
           <Search className="h-3.5 w-3.5 shrink-0 text-faint-foreground" />
           <input
             ref={searchRef}
+            role="combobox"
+            aria-expanded
+            aria-controls={listId}
+            aria-activedescendant={rows[activeIndex] ? optionId(rows[activeIndex]!.thread.id) : undefined}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -600,6 +624,9 @@ export function ThreadNavPanel({
 
         <div
           ref={listRef}
+          id={listId}
+          role="listbox"
+          aria-label={t(($) => $.detail.thread_nav.search_placeholder)}
           // Scrolling is an intent signal: the reader is working the list, so
           // the panel should survive the pointer leaving afterwards.
           onScroll={pinned ? undefined : pin}
@@ -623,6 +650,7 @@ export function ThreadNavPanel({
                   <ThreadRow
                     prepared={row}
                     isActive={i === activeIndex}
+                    optionId={optionId(row.thread.id)}
                     query={query}
                     onJump={() => jump(row.thread.id)}
                     onHover={onHoverThread}

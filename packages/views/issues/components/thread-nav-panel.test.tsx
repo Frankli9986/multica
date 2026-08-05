@@ -4,6 +4,10 @@ import { useState, type ReactElement, type ReactNode } from "react";
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TimelineEntry } from "@multica/core/types";
+import {
+  createShortcutChord,
+  useShortcutStore,
+} from "@multica/core/shortcuts";
 import { renderWithI18n } from "../../test/i18n";
 import {
   ThreadNavPanel,
@@ -45,6 +49,14 @@ vi.mock("@multica/core/workspace/hooks", () => ({
 // The mock keeps the parts this component actually drives — the controlled
 // `open` prop, the reason-carrying `onOpenChange`, and the content's keyboard
 // and focus handlers — so the open/pin state machine is what gets exercised.
+vi.mock("@multica/ui/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ render }: { render: ReactElement }) => render,
+  TooltipContent: ({ children }: { children: ReactNode }) => (
+    <div data-testid="tooltip">{children}</div>
+  ),
+}));
+
 vi.mock("@multica/ui/components/ui/popover", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
   return {
@@ -297,6 +309,38 @@ describe("ThreadNavPanel", () => {
     expect(screen.getByRole("button", { name: /Comment threads \(4\)/ })).toBeTruthy();
   });
 
+  // getShortcut() is a getState() snapshot with no subscription, so a rebind in
+  // Settings left the tooltip advertising the old key while the keydown handler
+  // already honoured the new one. useShortcut subscribes.
+  it("re-renders the shortcut hint when the binding changes", () => {
+    renderWithI18n(<Harness />);
+    const keys = () =>
+      [...screen.getByTestId("tooltip").querySelectorAll("kbd")]
+        .map((k) => k.textContent?.trim())
+        .join("");
+    expect(keys()).toContain("O");
+
+    act(() => {
+      useShortcutStore
+        .getState()
+        .setShortcut("openThreadNav", createShortcutChord("G", { primary: true, shift: true }));
+    });
+    expect(keys()).toContain("G");
+    expect(keys()).not.toContain("O");
+
+    act(() => {
+      useShortcutStore.getState().setShortcut("openThreadNav", null);
+    });
+    // Unbound: the label stays, the keycaps go.
+    expect(screen.getByTestId("tooltip").querySelectorAll("kbd")).toHaveLength(0);
+
+    // The store is a module singleton; leaving an override here would follow
+    // every later test in this file.
+    act(() => {
+      useShortcutStore.getState().resetShortcut("openThreadNav");
+    });
+  });
+
   it("wires the trigger to open on hover, not only on press", () => {
     renderWithI18n(<Harness />);
     expect(mockState.triggerProps?.openOnHover).toBe(true);
@@ -531,9 +575,11 @@ describe("ThreadNavPanel", () => {
   });
 
   it("renders the keyboard hints as real keycaps, not glyphs in a string", () => {
-    const { container } = renderWithI18n(<Harness />);
+    renderWithI18n(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
-    const keycaps = container.querySelectorAll('[data-slot="shortcut-keycaps"]');
+    // Scoped to the footer: the trigger's tooltip renders keycaps too.
+    const footer = screen.getByText("select").closest("div")!.parentElement!;
+    const keycaps = footer.querySelectorAll('[data-slot="shortcut-keycaps"]');
     // Up, Down, Enter, Escape.
     expect(keycaps).toHaveLength(4);
     expect(screen.getByText("select")).toBeTruthy();
@@ -560,16 +606,46 @@ describe("ThreadNavPanel", () => {
     expect(rows).toEqual(["t3"]);
   });
 
-  it("lets Enter activate a focused thread row rather than the cursor row", () => {
-    const onJump = vi.fn();
-    renderWithI18n(<Harness onJump={onJump} />);
+  // One cursor, structurally: rows cannot take DOM focus, so focus and the
+  // highlight cannot drift apart. Tab reaches the filter pills and then leaves.
+  it("keeps rows out of the tab order and points at the active one", () => {
+    const { container } = renderWithI18n(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
-    const row = screen.getByText("Expiry: 7 days or 14 days?").closest("button")!;
-    row.focus();
-    fireEvent.keyDown(row, { key: "Enter" });
-    fireEvent.click(row);
-    expect(onJump).toHaveBeenCalledTimes(1);
-    expect(onJump).toHaveBeenCalledWith("t3");
+    const rows = [...container.querySelectorAll("[data-thread-id]")];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.getAttribute("tabindex") === "-1")).toBe(true);
+    expect(rows.every((r) => r.getAttribute("role") === "option")).toBe(true);
+
+    const search = screen.getByPlaceholderText("Search threads or authors");
+    expect(search.getAttribute("aria-activedescendant")).toBe(rows[0]!.id);
+    expect(rows[0]!.getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    expect(search.getAttribute("aria-activedescendant")).toBe(rows[1]!.id);
+    expect(rows[1]!.getAttribute("aria-selected")).toBe("true");
+    expect(rows[0]!.getAttribute("aria-selected")).toBe("false");
+  });
+
+  // The reviewer's repro: with focus on a child control, an arrow key must not
+  // move a highlight that Enter will then ignore.
+  it("does not move the highlight from a focused filter pill", () => {
+    const onJump = vi.fn();
+    const { container } = renderWithI18n(<Harness onJump={onJump} />);
+    fireEvent.click(screen.getByRole("button", { name: /Comment threads/ }));
+    const search = screen.getByPlaceholderText("Search threads or authors");
+    const pill = screen.getByRole("button", { name: /^Unresolved/ });
+    pill.focus();
+
+    fireEvent.keyDown(pill, { key: "ArrowDown" });
+    fireEvent.keyDown(pill, { key: "n", ctrlKey: true });
+    // Highlight untouched — the search field owns it.
+    const rows = [...container.querySelectorAll("[data-thread-id]")];
+    expect(search.getAttribute("aria-activedescendant")).toBe(rows[0]!.id);
+
+    // And Enter still activates the pill rather than jumping.
+    fireEvent.keyDown(pill, { key: "Enter" });
+    fireEvent.click(pill);
+    expect(onJump).not.toHaveBeenCalled();
   });
 
   // CJK users commit an IME candidate with Enter. Acting on it jumped away and
