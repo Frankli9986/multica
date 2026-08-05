@@ -35,6 +35,8 @@
     "title_other": "{{count}} 条排队消息",
     "clear": "全部清空",
     "send_now": "立即发送",
+    "send_now_unavailable": "当前回复开始后才能立即发送",
+    "send_now_unavailable_toast": "暂时无法立即发送，正在刷新队列。",
     "edit": "编辑排队消息",
     "remove": "移除排队消息",
     "fallback": "排队消息",
@@ -94,8 +96,8 @@
     },
     "stop_dialog": {
       "title": "停止这次运行？",
-      "description_with_title": "这会取消 \"{{title}}\" 里的当前智能体任务。已产生的内容会保留在对话里。",
-      "description_default": "这会取消当前智能体任务。已产生的内容会保留在对话里。",
+      "description_with_title": "这会取消 \"{{title}}\" 里的当前智能体 task。已产生的内容会保留在对话里。",
+      "description_default": "这会取消当前智能体 task。已产生的内容会保留在对话里。",
       "cancel": "继续运行",
       "confirm": "停止运行",
       "confirming": "停止中..."
@@ -131,7 +133,7 @@
   "empty_state": {
     "first_time_title": "和你的智能体对话",
     "first_time_intro": "✨ 它们了解你的工作区——",
-    "first_time_pillars": "issue、项目、skill",
+    "first_time_pillars": "任务、项目、skill",
     "first_time_pillars_suffix": "。",
     "first_time_actions": "让它做一份总结、规划你的一天，或交给它一个小任务。",
     "returning_title_named": "你好，我是 {{name}}",
@@ -160,6 +162,7 @@
     "stages": {
       "offline": "离线",
       "reconnecting": "重连中",
+      "retrying": "重试中",
       "queued": "排队中",
       "waiting_local_directory": "等待本地目录释放",
       "starting_up": "启动中",
