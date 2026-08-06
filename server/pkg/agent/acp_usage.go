@@ -36,29 +36,34 @@ func (s acpUsageSnapshot) has(field acpUsageFields) bool {
 // backends: cumulative usage_update snapshots and terminal prompt usage.
 //
 // Per-bucket maxima deduplicate equivalent snapshots while retaining buckets
-// omitted from one path. A self-describing snapshot may replace an ambiguous
-// input count with a smaller normalized count when totalTokens proves cached
-// reads were included in inputTokens. It cannot do so when its total is below
-// the already-observed cumulative floor, which identifies a per-call terminal
-// delta arriving after a cumulative stream snapshot.
+// omitted from one path. Input is special: self-describing normalized and
+// ambiguous candidates are retained separately, then resolved from the whole
+// observed set. This makes the result independent of whether a late
+// usage_update arrives before or after the terminal prompt response.
 type acpUsageAccumulator struct {
 	TokenUsage
-	fields          acpUsageFields
-	totalTokens     int64
-	inputNormalized bool
+	fields acpUsageFields
+
+	ambiguousInput    int64
+	hasAmbiguousInput bool
+	normalizedInput   int64
+	normalizedTotal   int64
+	hasNormalized     bool
 }
 
 func (a *acpUsageAccumulator) merge(next acpUsageSnapshot) {
 	if next.has(acpUsageInput) {
-		switch {
-		case !a.has(acpUsageInput):
-			a.InputTokens = next.InputTokens
-			a.inputNormalized = next.inputNormalized
-		case next.inputNormalized && !a.inputNormalized && a.acceptsNormalizedInput(next):
-			a.InputTokens = next.InputTokens
-			a.inputNormalized = true
-		case next.inputNormalized == a.inputNormalized && next.InputTokens > a.InputTokens:
-			a.InputTokens = next.InputTokens
+		if next.inputNormalized {
+			if !a.hasNormalized ||
+				next.totalTokens > a.normalizedTotal ||
+				(next.totalTokens == a.normalizedTotal && next.InputTokens > a.normalizedInput) {
+				a.normalizedInput = next.InputTokens
+				a.normalizedTotal = next.totalTokens
+				a.hasNormalized = true
+			}
+		} else if !a.hasAmbiguousInput || next.InputTokens > a.ambiguousInput {
+			a.ambiguousInput = next.InputTokens
+			a.hasAmbiguousInput = true
 		}
 	}
 	if next.has(acpUsageOutput) && (!a.has(acpUsageOutput) || next.OutputTokens > a.OutputTokens) {
@@ -78,69 +83,66 @@ func (a *acpUsageAccumulator) merge(next acpUsageSnapshot) {
 	}
 
 	a.fields |= next.fields
-	if next.hasTotalTokens && next.totalTokens > a.totalTokens {
-		a.totalTokens = next.totalTokens
-	}
-}
-
-// mergeFallback fills fields omitted (or reported as zero) by a preferred
-// representation. ACP's standard top-level usage is authoritative over vendor
-// `_meta`, and nested `_meta.usage` is authoritative over its flat mirror.
-// Provider cost still takes the maximum because zero means "not reported" and
-// runtimes may expose the priced total in only one representation.
-func (a *acpUsageAccumulator) mergeFallback(next acpUsageSnapshot) {
-	if next.has(acpUsageInput) && (!a.has(acpUsageInput) || a.InputTokens == 0) {
-		a.InputTokens = next.InputTokens
-		a.inputNormalized = next.inputNormalized
-	}
-	if next.has(acpUsageOutput) && (!a.has(acpUsageOutput) || a.OutputTokens == 0) {
-		a.OutputTokens = next.OutputTokens
-	}
-	if next.has(acpUsageCacheRead) && (!a.has(acpUsageCacheRead) || a.CacheReadTokens == 0) {
-		a.CacheReadTokens = next.CacheReadTokens
-	}
-	if next.has(acpUsageCacheWrite) && (!a.has(acpUsageCacheWrite) || a.CacheWriteTokens == 0) {
-		a.CacheWriteTokens = next.CacheWriteTokens
-	}
-	if next.has(acpUsageCost) && (!a.has(acpUsageCost) || next.CostUSDTicks > a.CostUSDTicks) {
-		a.CostUSDTicks = next.CostUSDTicks
-	}
-
-	a.fields |= next.fields
-	if !a.hasTotal() && next.hasTotalTokens {
-		a.totalTokens = next.totalTokens
-	}
+	a.resolveInput()
 }
 
 func (a acpUsageAccumulator) has(field acpUsageFields) bool {
 	return a.fields&field != 0
 }
 
-func (a acpUsageAccumulator) hasTotal() bool {
-	return a.totalTokens > 0
+func (a *acpUsageAccumulator) resolveInput() {
+	switch {
+	case !a.hasAmbiguousInput && a.hasNormalized:
+		a.InputTokens = a.normalizedInput
+	case a.hasAmbiguousInput && !a.hasNormalized:
+		a.InputTokens = a.ambiguousInput
+	case a.hasAmbiguousInput && a.hasNormalized:
+		// input + output is a conservative cumulative floor even when input
+		// includes cached reads. A normalized record below that floor is a
+		// per-call delta and must not replace the larger cumulative stream.
+		if a.normalizedTotal >= a.ambiguousInput+a.OutputTokens {
+			a.InputTokens = a.normalizedInput
+		} else {
+			a.InputTokens = a.ambiguousInput
+		}
+	}
 }
 
-func (a acpUsageAccumulator) acceptsNormalizedInput(next acpUsageSnapshot) bool {
-	if !next.hasTotalTokens || next.totalTokens <= 0 {
-		return false
+// withFallback fills fields omitted (or reported as zero) by a preferred
+// representation. ACP's standard top-level usage is authoritative over vendor
+// `_meta`, and nested `_meta.usage` is authoritative over its flat mirror.
+// Provider cost still takes the maximum because zero means "not reported" and
+// runtimes may expose the priced total in only one representation.
+func (s acpUsageSnapshot) withFallback(fallback acpUsageSnapshot) acpUsageSnapshot {
+	result := s
+	inputFromFallback := false
+	if fallback.has(acpUsageInput) && (!result.has(acpUsageInput) || result.InputTokens == 0) {
+		result.InputTokens = fallback.InputTokens
+		result.inputNormalized = fallback.inputNormalized
+		inputFromFallback = true
 	}
-	if a.totalTokens > 0 && next.totalTokens < a.totalTokens {
-		return false
+	if fallback.has(acpUsageOutput) && (!result.has(acpUsageOutput) || result.OutputTokens == 0) {
+		result.OutputTokens = fallback.OutputTokens
 	}
-	// inputTokens + outputTokens is a conservative floor even when input still
-	// contains cached reads. A smaller terminal total is therefore a per-call
-	// delta, not a replacement for the cumulative stream counters.
-	return next.totalTokens >= a.InputTokens+a.OutputTokens
-}
+	if fallback.has(acpUsageCacheRead) && (!result.has(acpUsageCacheRead) || result.CacheReadTokens == 0) {
+		result.CacheReadTokens = fallback.CacheReadTokens
+	}
+	if fallback.has(acpUsageCacheWrite) && (!result.has(acpUsageCacheWrite) || result.CacheWriteTokens == 0) {
+		result.CacheWriteTokens = fallback.CacheWriteTokens
+	}
+	if fallback.has(acpUsageCost) && (!result.has(acpUsageCost) || fallback.CostUSDTicks > result.CostUSDTicks) {
+		result.CostUSDTicks = fallback.CostUSDTicks
+	}
 
-func (a acpUsageAccumulator) snapshot() acpUsageSnapshot {
-	return acpUsageSnapshot{
-		TokenUsage:      a.TokenUsage,
-		fields:          a.fields,
-		totalTokens:     a.totalTokens,
-		hasTotalTokens:  a.totalTokens > 0,
-		inputNormalized: a.inputNormalized,
+	result.fields |= fallback.fields
+	if inputFromFallback && fallback.inputNormalized {
+		result.totalTokens = fallback.totalTokens
+		result.hasTotalTokens = fallback.hasTotalTokens
+	} else if !result.hasTotalTokens && fallback.hasTotalTokens {
+		result.totalTokens = fallback.totalTokens
+		result.hasTotalTokens = true
 	}
+	return result
 }
 
 func parseACPTokenUsage(data json.RawMessage) TokenUsage {
@@ -193,10 +195,12 @@ func parseACPTokenUsageSnapshot(data json.RawMessage) acpUsageSnapshot {
 		snapshot.hasTotalTokens = true
 	}
 
-	snapshot.TokenUsage, snapshot.inputNormalized = normalizeACPTokenUsage(
-		snapshot.TokenUsage,
-		snapshot.totalTokens,
-	)
+	if snapshot.has(acpUsageInput) && snapshot.has(acpUsageOutput) && snapshot.has(acpUsageCacheRead) {
+		snapshot.TokenUsage, snapshot.inputNormalized = normalizeACPTokenUsage(
+			snapshot.TokenUsage,
+			snapshot.totalTokens,
+		)
+	}
 	return snapshot
 }
 
@@ -209,16 +213,15 @@ func parseACPTokenUsageSnapshotFromMeta(meta json.RawMessage) acpUsageSnapshot {
 		return acpUsageSnapshot{}
 	}
 
-	var accumulator acpUsageAccumulator
 	var envelope struct {
 		Usage json.RawMessage `json:"usage"`
 	}
+	var preferred acpUsageSnapshot
 	if err := json.Unmarshal(meta, &envelope); err == nil &&
 		len(envelope.Usage) > 0 && string(envelope.Usage) != "null" {
-		accumulator.merge(parseACPTokenUsageSnapshot(envelope.Usage))
+		preferred = parseACPTokenUsageSnapshot(envelope.Usage)
 	}
-	accumulator.mergeFallback(parseACPTokenUsageSnapshot(meta))
-	return accumulator.snapshot()
+	return preferred.withFallback(parseACPTokenUsageSnapshot(meta))
 }
 
 func parseACPTokenUsageFromMeta(meta json.RawMessage) TokenUsage {

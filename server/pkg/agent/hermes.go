@@ -1225,16 +1225,15 @@ func (c *hermesClient) extractPromptResult(data json.RawMessage) {
 		stopReason: resp.StopReason,
 		modelID:    parseACPModelIDFromMeta(resp.Meta),
 	}
-	var usage acpUsageAccumulator
+	var usage acpUsageSnapshot
 	if len(resp.Usage) > 0 && string(resp.Usage) != "null" {
-		usage.merge(parseACPTokenUsageSnapshot(resp.Usage))
+		usage = parseACPTokenUsageSnapshot(resp.Usage)
 	}
 	// Some agents (notably xAI Grok Build) put per-turn metering under
 	// result._meta instead of, or in addition to, the standard top-level
 	// usage field. Reconcile both shapes so partial mirrors cannot drop a
 	// cache bucket or provider-reported cost.
-	usage.mergeFallback(parseACPTokenUsageSnapshotFromMeta(resp.Meta))
-	pr.usage = usage.snapshot()
+	pr.usage = usage.withFallback(parseACPTokenUsageSnapshotFromMeta(resp.Meta))
 
 	if c.onPromptDone != nil {
 		c.onPromptDone(pr)

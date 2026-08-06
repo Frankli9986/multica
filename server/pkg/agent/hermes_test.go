@@ -2184,6 +2184,12 @@ while IFS= read -r line; do
       printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"ses_model","models":{"currentModelId":"nous:moonshotai/kimi-k2.6","availableModels":[{"modelId":"nous:moonshotai/kimi-k2.6","name":"moonshotai/kimi-k2.6"}]}}}\n' "$id"
       ;;
     *'"method":"session/prompt"'*)
+      if [ -n "$HERMES_LATE_USAGE" ]; then
+        printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn","usage":{"inputTokens":120,"outputTokens":30,"totalTokens":150,"cachedReadTokens":20,"cachedWriteTokens":7,"costUsdTicks":400}}}\n' "$id"
+        sleep 0.05
+        printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_model","update":{"sessionUpdate":"usage_update","usage":{"inputTokens":300,"outputTokens":120,"cachedReadTokens":80,"costUsdTicks":900}}}}\n'
+        exit 0
+      fi
       printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn","usage":{"inputTokens":17,"outputTokens":5,"cachedReadTokens":3,"cachedWriteTokens":2,"costUsdTicks":900}}}\n' "$id"
       exit 0
       ;;
@@ -2237,6 +2243,40 @@ func TestHermesBackendAttributesUsageToACPDefaultModel(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("timeout waiting for result")
+	}
+}
+
+func TestHermesBackendMergesLateCumulativeUsageAfterPromptResponse(t *testing.T) {
+	t.Parallel()
+
+	fakePath := filepath.Join(t.TempDir(), "hermes")
+	writeTestExecutable(t, fakePath, []byte(fakeHermesACPUsageWithDefaultModelScript()))
+
+	backend, err := New("hermes", Config{
+		ExecutablePath: fakePath,
+		Logger:         slog.Default(),
+		Env:            map[string]string{"HERMES_LATE_USAGE": "1"},
+	})
+	if err != nil {
+		t.Fatalf("new hermes backend: %v", err)
+	}
+
+	session, err := backend.Execute(context.Background(), "prompt", ExecOptions{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	go func() {
+		for range session.Messages {
+		}
+	}()
+
+	result := <-session.Result
+	if result.Status != "completed" {
+		t.Fatalf("status=%q error=%q", result.Status, result.Error)
+	}
+	want := TokenUsage{InputTokens: 300, OutputTokens: 120, CacheReadTokens: 80, CacheWriteTokens: 7, CostUSDTicks: 900}
+	if usage := result.Usage["nous:moonshotai/kimi-k2.6"]; usage != want {
+		t.Fatalf("usage = %+v, want %+v", usage, want)
 	}
 }
 

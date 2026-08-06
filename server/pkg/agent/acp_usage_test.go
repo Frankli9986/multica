@@ -61,6 +61,14 @@ func TestACPUsageAccumulatorMatrix(t *testing.T) {
 			want: TokenUsage{InputTokens: 300, OutputTokens: 120, CacheReadTokens: 80, CacheWriteTokens: 7, CostUSDTicks: 900},
 		},
 		{
+			name: "late cumulative stream outranks earlier normalized prompt delta",
+			snapshots: []string{
+				`{"inputTokens":120,"outputTokens":30,"totalTokens":150,"cacheReadTokens":20,"cacheWriteTokens":7,"costUsdTicks":400}`,
+				`{"inputTokens":300,"outputTokens":120,"cacheReadTokens":80,"costUsdTicks":900}`,
+			},
+			want: TokenUsage{InputTokens: 300, OutputTokens: 120, CacheReadTokens: 80, CacheWriteTokens: 7, CostUSDTicks: 900},
+		},
+		{
 			name: "normalized cumulative prompt replaces overlapping stream input",
 			snapshots: []string{
 				`{"inputTokens":120,"outputTokens":30,"cacheReadTokens":20,"costUsdTicks":800}`,
@@ -68,6 +76,15 @@ func TestACPUsageAccumulatorMatrix(t *testing.T) {
 				`{"inputTokens":120,"outputTokens":30,"cacheReadTokens":20,"costUsdTicks":1000}`,
 			},
 			want: TokenUsage{InputTokens: 100, OutputTokens: 30, CacheReadTokens: 20, CostUSDTicks: 1000},
+		},
+		{
+			name: "unknown total cannot block later normalized snapshot",
+			snapshots: []string{
+				`{"inputTokens":120,"outputTokens":30,"cacheReadTokens":20,"costUsdTicks":800}`,
+				`{"prompt_tokens":200,"completion_tokens":50,"totalTokens":250,"costUsdTicks":1000}`,
+				`{"inputTokens":120,"outputTokens":30,"totalTokens":150,"cacheReadTokens":20,"cacheWriteTokens":5,"costUsdTicks":900}`,
+			},
+			want: TokenUsage{InputTokens: 100, OutputTokens: 30, CacheReadTokens: 20, CacheWriteTokens: 5, CostUSDTicks: 1000},
 		},
 		{
 			name: "provider cost uses largest cumulative report",
