@@ -10,7 +10,7 @@
 
 **Make humans and AI agents work as one team.**
 
-[English | [简体中文](VISION.zh-CN.md)]
+[English | [简体中文](VISION.zh.md)]
 
 </div>
 
@@ -94,5 +94,5 @@ of record and action for human-agent work.**
 ## Where we are on that path
 
 This document describes the future Multica is building, not a feature list. For what actually
-works today — and the rough edges we'd rather you hear from us — see
-[Works today](README.md#works-today) in the README.
+works today — and how finished each part is — see [Project status](README.md#project-status) in
+the README.

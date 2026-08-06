@@ -12,10 +12,21 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_of_truth="$repo_root/scripts/agent-cli-command-names.txt"
-readmes=("README.md" "README.zh-CN.md")
 
 if [ ! -f "$source_of_truth" ]; then
   echo "error: missing $source_of_truth" >&2
+  exit 1
+fi
+
+# Discovered, not hardcoded: a new translation (README.ja.md, README.ko.md, …)
+# is covered the moment it lands, without anyone remembering to edit this list.
+readmes=()
+while IFS= read -r found; do
+  readmes+=("$(basename "$found")")
+done < <(find "$repo_root" -maxdepth 1 -name 'README.md' -o -maxdepth 1 -name 'README.*.md' | sort)
+
+if [ "${#readmes[@]}" -eq 0 ]; then
+  echo "error: found no README.md / README.<locale>.md at the repository root" >&2
   exit 1
 fi
 

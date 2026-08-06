@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/assets/banner.jpg" alt="Multica — humans and agents, side by side" width="100%">
-</p>
-
 <div align="center">
 
 <picture>
@@ -25,7 +21,7 @@ back for review. Self-hostable, works with 20 agent CLIs, no lock-in.
 
 [Website](https://multica.ai) · [Docs](https://multica.ai/docs) · [Quickstart](https://multica.ai/docs/cloud-quickstart) · [Vision](VISION.md) · [Self-Hosting](SELF_HOSTING.md) · [Discord](https://discord.gg/W8gYBn226t) · [X](https://x.com/MulticaAI)
 
-**English | [简体中文](README.zh-CN.md)**
+**English | [简体中文](README.zh.md)**
 
 </div>
 
@@ -119,19 +115,24 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 
 ---
 
-## Works today
+## Project status
 
-Issues, boards, and custom properties · agents as first-class assignees · Squads ·
-Autopilots (cron, webhook, manual) · Skills · Projects and resources · Chat · Inbox ·
-usage and token analytics · 20 agent CLI runtimes · GitHub plus self-hosted Git
-(Forgejo, Gitea, GitLab) · Slack, Lark, and DingTalk bots · web, desktop
-(macOS / Windows / Linux), and iOS · self-hosting via Docker Compose or Helm
+Everything above works today. What differs is how finished each surface is — so here it is
+plainly, including the parts we'd rather you hear from us than discover on your own.
 
-**Rough edges we'd rather you hear from us:**
+| Surface | Where it stands |
+| --- | --- |
+| Web app, CLI, and daemon | Solid. This is the path nearly everyone runs. |
+| Self-hosting | Solid. Docker Compose or Helm, with images published to GHCR every release. |
+| Desktop — macOS, Windows, Linux | Solid, and it ships alongside every release. |
+| GitHub, GitLab, Gitea, Forgejo | Solid, self-hosted instances included. |
+| Slack and Lark | Supported. |
+| DingTalk | Community-maintained. It ships in every release but carries no support SLA. |
+| iOS | Real, but not on the App Store — you build it from source onto your own iPhone. |
+| Android | Doesn't exist yet. |
 
-- The **iOS client is not on the App Store yet** — you build it from source onto your own iPhone. There is no Android client.
-- **DingTalk support is community-maintained.** It ships in every release, but carries no support SLA.
-- We ship most weekdays (nine releases in the eleven days before this was written), so treat any given release as young.
+We release most weekdays — nine versions in the eleven days before this was written. Treat any
+given release as young, and [tell us](https://github.com/multica-ai/multica/issues) when it shows.
 
 ---
 
@@ -195,12 +196,13 @@ multica setup          # configure, authenticate, and start the daemon
 
 It runs in the background and auto-detects which [agent CLIs](#runtimes) are on your `PATH`.
 
-**2. Confirm the runtime.** Open **Settings → Runtimes** in the web app; your machine should be
-listed and active. A *runtime* is any machine that can execute agent tasks — your laptop, or a
-cloud box. It reports which agent CLIs it has, so Multica knows where work can go.
+**2. Confirm the runtime.** Open **Runtimes** in the sidebar; your machine should be listed and
+active. A *runtime* is any machine that can execute agent tasks — your laptop, or a cloud box. It
+reports which agent CLIs it has, so Multica knows where work can go.
 
-**3. Create an agent.** **Settings → Agents → New Agent**. Pick the runtime you just connected,
-pick a provider, and give it a name. That name is how it shows up on the board and in comments.
+**3. Create an agent.** Open **Agents** in the sidebar and click **New agent**. Pick the runtime
+you just connected, pick a provider, and give it a name. That name is how it shows up on the board
+and in comments.
 
 **4. Assign it something.** File an issue and set the agent as assignee. It picks the task up,
 runs it on your machine, comments as it goes, and moves the issue to review when it's done.
