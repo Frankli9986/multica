@@ -73,6 +73,18 @@ interface Props {
    *  flash that reply's wrapper (bg only). Mirrors web's distinction at
    *  packages/views/issues/components/comment-card.tsx:498-682. */
   highlightedCommentId?: string | null;
+  /** When set, an "unread" hairline divider is drawn ABOVE the reply with
+   *  this id (inside the thread bubble). Used when the last-viewed snapshot
+   *  falls inside a thread — root and early replies are read, later replies
+   *  are unread. Nullish = no in-thread divider for this card. */
+  unreadBeforeReplyId?: string | null;
+  /** Fires once when the deep-link target (root or a reply) first mounts
+   *  inside this card. TimelineList uses it to start the highlight-hold
+   *  timer at mount rather than at data-arrival, so render-ahead doesn't
+   *  burn the 5 s window before the user scrolls to the target. Fires at
+   *  most once per target id (a recycle/remount of the same id is a no-op).
+   */
+  onHighlightMounted?: (commentId: string) => void;
 }
 
 export function CommentCard({
@@ -81,6 +93,8 @@ export function CommentCard({
   issueId,
   issueIdentifier,
   highlightedCommentId,
+  unreadBeforeReplyId,
+  onHighlightMounted,
 }: Props) {
   // Resolved threads default to a single-line bar; tap expands in place for
   // the current session. Unmount (scroll out of viewport) resets — same
@@ -124,6 +138,22 @@ export function CommentCard({
       setExpanded(true);
     }
   }, [resolved, highlightedCommentId, entry.id, replies]);
+
+  // Notify the parent when the deep-link target is mounted inside this card.
+  // The parent starts the 5 s highlight-hold timer from this event rather
+  // than data-arrival so render-ahead can't burn the window before the user
+  // scrolls to the target. Fires whenever the target is present in this
+  // card (root or a reply); the parent dedupes by (id, nonce) so recycle
+  // remounts can't repeatedly re-arm the timer.
+  useEffect(() => {
+    if (!highlightedCommentId || !onHighlightMounted) return;
+    if (
+      highlightedCommentId === entry.id ||
+      replies.some((r) => r.id === highlightedCommentId)
+    ) {
+      onHighlightMounted(highlightedCommentId);
+    }
+  }, [highlightedCommentId, entry.id, replies, onHighlightMounted]);
 
   if (resolved && !expanded) {
     return (
@@ -172,16 +202,21 @@ export function CommentCard({
             onPressChange={handlePressChange}
           />
           {replies.map((reply) => (
-            <View key={reply.id} className="border-t border-border/60 pt-3">
-              <CommentBody
-                entry={reply}
-                issueId={issueId}
-                issueIdentifier={issueIdentifier}
-                onPressChange={handlePressChange}
-              />
-              <ReplyHighlightOverlay
-                active={highlightedCommentId === reply.id}
-              />
+            <View key={reply.id}>
+              {unreadBeforeReplyId === reply.id ? (
+                <ThreadUnreadDivider />
+              ) : null}
+              <View className="border-t border-border/60 pt-3">
+                <CommentBody
+                  entry={reply}
+                  issueId={issueId}
+                  issueIdentifier={issueIdentifier}
+                  onPressChange={handlePressChange}
+                />
+                <ReplyHighlightOverlay
+                  active={highlightedCommentId === reply.id}
+                />
+              </View>
             </View>
           ))}
         </View>
@@ -573,6 +608,24 @@ function FailedActions({
           Discard
         </Text>
       </Pressable>
+    </View>
+  );
+}
+
+/**
+ * "New" divider rendered INSIDE a thread bubble, above the first unread
+ * reply. Visually indented to align with reply content rather than
+ * spanning the whole card, so it reads as "this reply onward is new"
+ * rather than a new top-level event.
+ */
+function ThreadUnreadDivider() {
+  return (
+    <View className="flex-row items-center gap-2 pt-3">
+      <View className="flex-1 h-px bg-destructive/40" />
+      <Text className="text-[10px] uppercase tracking-wider font-medium text-destructive">
+        New
+      </Text>
+      <View className="flex-1 h-px bg-destructive/40" />
     </View>
   );
 }

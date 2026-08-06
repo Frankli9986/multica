@@ -1,21 +1,28 @@
 /**
- * Comment creation mutation. Mirrors the optimistic + invalidate pattern of
- * apps/mobile/data/mutations/inbox.ts:17 — operates on the flat
- * `TimelineEntry[]` timeline cache (ASC, oldest first; server-side
- * pagination was dropped in #2322).
+ * Comment creation mutation. Operates on the flat `TimelineEntry[]`
+ * timeline cache (ASC, oldest first; server-side pagination was dropped in
+ * #2322).
  *
  * Optimistic strategy:
  *   - Cancel timeline refetches.
- *   - Snapshot the current cache.
- *   - Append a synthetic comment-typed TimelineEntry to the end of the list
- *     (newest position, since the array is ASC).
- *   - On error: roll back to the snapshot.
- *   - On settled: invalidate so the server's real comment row replaces the
- *     synthetic one (real id, real created_at).
+ *   - Append a synthetic `optimistic-<ts>` TimelineEntry at the end
+ *     (newest position in an ASC list).
+ *   - On error: do NOT roll back — keep the optimistic row so the inline
+ *     "Failed · Retry · Discard" affordance has something to render.
+ *   - On success (server returns the full Comment): do the ONE-TO-ONE
+ *     canonical replacement. This mutation owns both the optimistic id and
+ *     the server response, so it maps the real comment over the optimistic
+ *     row with no guessing. If the WS `comment:created` event beat the HTTP
+ *     response and already inserted the real id, we simply drop the
+ *     optimistic row (the real entry stays). No time-window / content
+ *     heuristic is used anywhere — identical concurrent submits can never
+ *     mis-pair because the pairing key is this mutation's own ctx, not a
+ *     fuzzy match against incoming WS payloads.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   AgentTask,
+  Comment,
   CreateIssueRequest,
   Issue,
   IssueReaction,
@@ -28,6 +35,10 @@ import { api } from "@/data/api";
 import { issueKeys } from "@/data/queries/issues";
 import { inboxKeys } from "@/data/queries/inbox";
 import { useAuthStore } from "@/data/auth-store";
+import {
+  commentToTimelineEntry,
+  replaceOptimisticWithReal,
+} from "@/data/realtime/issue-ws-updaters";
 import { useWorkspaceStore } from "@/data/workspace-store";
 import { useFailedCommentsStore } from "@/data/stores/failed-comments-store";
 
@@ -73,6 +84,7 @@ export function useCreateComment(issueId: string) {
       const prev = qc.getQueryData<TimelineEntry[]>(key);
       if (!userId) return { prev, key, optimisticId: null };
 
+      const now = new Date().toISOString();
       const optimisticId = `optimistic-${Date.now()}`;
       const optimistic: TimelineEntry = {
         type: "comment",
@@ -81,8 +93,8 @@ export function useCreateComment(issueId: string) {
         actor_id: userId,
         content,
         parent_id: parentId ?? null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: now,
+        updated_at: now,
         comment_type: "comment",
         reactions: [],
         attachments: [],
@@ -112,14 +124,22 @@ export function useCreateComment(issueId: string) {
         });
       }
     },
-    // Invalidate only on success — the failed-comment path needs the cache
-    // to keep its optimistic entry so the inline retry UI has something to
-    // render against. The success refetch replaces the synthetic id with
-    // the server-issued one (same ASC bottom position).
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: issueKeys.timeline(wsId, issueId),
-      });
+    // Canonical optimistic -> real replacement. This mutation owns both
+    // the optimistic id (ctx) and the server response (data), so map the
+    // real comment over the optimistic row. If the WS event already
+    // inserted the real id (it beat the HTTP response), the real-id
+    // present check leaves that entry in place and we just remove the
+    // optimistic row — no duplicate, no fuzzy pairing. Then invalidate so
+    // reactions/attachments resolve authoritatively.
+    onSuccess: (data: Comment, _vars, ctx) => {
+      const key = issueKeys.timeline(wsId, issueId);
+      if (ctx?.optimisticId) {
+        const real = commentToTimelineEntry(data);
+        qc.setQueryData<TimelineEntry[]>(key, (old) =>
+          replaceOptimisticWithReal(old, ctx.optimisticId, real),
+        );
+      }
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }

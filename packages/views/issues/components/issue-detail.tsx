@@ -63,6 +63,9 @@ import { ProjectPicker } from "../../projects/components/project-picker";
 import { LocalDirectoryHint } from "../../projects/components/local-directory-hint";
 import { CommentCard } from "./comment-card";
 import { CommentInput } from "./comment-input";
+import { TimelineSortToggle } from "./timeline-sort-toggle";
+import { useTimelineSortStore } from "@multica/core/issues/stores/timeline-sort-store";
+import { sortTimelineEntries } from "@multica/core/issues/timeline-sort";
 import { ResolvedThreadBar } from "./resolved-thread-bar";
 import { ThreadMinimap, type ThreadMinimapThread } from "./thread-minimap";
 import { collectThreadReplies, deriveThreadResolution } from "./thread-utils";
@@ -1162,13 +1165,20 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
   // unrelated thread) hands every card a brand-new prop reference and forces
   // every thread subtree to re-render in lockstep.
   const prevThreadRepliesRef = useRef<Map<string, TimelineEntry[]>>(new Map());
+  const timelineSortDirection = useTimelineSortStore((s) => s.direction);
   const timelineView = useMemo(() => {
     // Group entries: top-level = activities + root comments; replies are
     // bucketed under their parent's id and rendered nested inside CommentCard.
     // No orphan rescue needed: the timeline is fetched in full, so every
     // reply's parent is always in the same array.
-    const topLevel = timeline.filter(
-      (e) => e.type === "activity" || !e.parent_id,
+    //
+    // Coalescing and grouping always run on an ASC top-level sequence so the
+    // same-actor merge and "latest activity block" detection keep their
+    // existing semantics; the Newest sort only reverses the final groups
+    // array (on a copy) so block-internal order stays ASC.
+    const topLevel = sortTimelineEntries(
+      timeline.filter((e) => e.type === "activity" || !e.parent_id),
+      "oldest",
     );
     const repliesByParent = new Map<string, TimelineEntry[]>();
     for (const e of timeline) {
@@ -1237,8 +1247,15 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
       }
     }
 
-    return { threadReplies, groups };
-  }, [timeline]);
+    // Newest-first: reverse the top-level group sequence on a copy so block
+    // internals stay ASC. `slice()` is mandatory — reversing `groups` in
+    // place would mutate the array we just built and break the
+    // newestActivityGroupId scan below on the next render.
+    const orderedGroups =
+      timelineSortDirection === "newest" ? groups.slice().reverse() : groups;
+
+    return { threadReplies, groups: orderedGroups };
+  }, [timeline, timelineSortDirection]);
 
   // Flat array consumed by <Virtuoso>. Recomputed when timelineView.groups
   // changes (timeline events) or expandedResolved flips (user toggles a
@@ -1265,13 +1282,22 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
     closeFind();
   }, [id, closeFind]);
 
-  // ID of the trailing activity block — the only one expanded by default.
-  const lastActivityGroupId = useMemo(() => {
-    for (let i = timelineView.groups.length - 1; i >= 0; i--) {
-      const g = timelineView.groups[i]!;
-      if (g.type === "activities") return g.entries[0]!.id;
+  // ID of the newest activity block — the only one expanded by default.
+  // Identified by the latest `created_at` in the block (block internals are
+  // always ASC, so the last entry is its newest) rather than by array
+  // position: in Newest-first the newest block is at index 0, not the end.
+  const newestActivityGroupId = useMemo(() => {
+    let chosen: string | null = null;
+    let latest = "";
+    for (const g of timelineView.groups) {
+      if (g.type !== "activities") continue;
+      const last = g.entries[g.entries.length - 1]!;
+      if (last.created_at > latest) {
+        latest = last.created_at;
+        chosen = g.entries[0]!.id;
+      }
     }
-    return null;
+    return chosen;
   }, [timelineView.groups]);
 
   // Map of reply-comment id → root-comment id, so a deep-link to a reply
@@ -2151,8 +2177,8 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
       ? true
       : collapsedActivityIds.has(item.id)
         ? false
-        : item.id === lastActivityGroupId;
-    const truncateOlder = item.id === lastActivityGroupId;
+        : item.id === newestActivityGroupId;
+    const truncateOlder = item.id === newestActivityGroupId;
     const showOlder = showOlderActivityIds.has(item.id);
     return (
       <ActivityBlock
@@ -2562,6 +2588,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h2 className="text-base font-semibold">{t(($) => $.detail.activity_section)}</h2>
+                <TimelineSortToggle t={t} />
               </div>
               <div className="flex items-center gap-2">
                 <button
