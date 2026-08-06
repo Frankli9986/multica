@@ -444,9 +444,33 @@ WHERE task.id = @task_id
 RETURNING task.*;
 
 -- name: DeleteUserChatMessageByTask :one
+-- Deletes the MEMBER-TYPED input of a cancelled/edited turn.
+--
+-- The kickoff exclusion is load-bearing since MUL-5827: an onboarding session's
+-- first real turn owns two user rows — the member's message and the adopted
+-- kickoff — so an unqualified delete would take the kickoff with it. That row
+-- is the only copy of the onboarding context and of "you have already greeted
+-- them", so losing it makes Mika introduce herself a second time, and the
+-- RETURNING row would be an arbitrary one of the two: cancel could hand the
+-- member the product's internal prompt as their restored draft, and silently
+-- drop what they actually typed. Callers release the kickoff separately
+-- (ReleaseOnboardingKickoffFromTask) so the next send re-adopts it.
 DELETE FROM chat_message
-WHERE task_id = $1 AND role = 'user'
+WHERE task_id = $1
+  AND role = 'user'
+  AND message_kind <> 'onboarding_kickoff'
 RETURNING *;
+
+-- name: ReleaseOnboardingKickoffFromTask :exec
+-- Returns an adopted kickoff to the unowned state when its turn is cancelled or
+-- edited away. Without this the kickoff stays bound to a task that no longer
+-- runs, so it would never reach a runtime and the member's next message would
+-- arrive with no onboarding context at all.
+UPDATE chat_message
+SET task_id = NULL
+WHERE task_id = $1
+  AND role = 'user'
+  AND message_kind = 'onboarding_kickoff';
 
 -- name: ListChatMessages :many
 -- IMPORTANT: the visible-head selector below is also used by
@@ -607,6 +631,14 @@ WITH latest_visible AS (
     WHERE claimed_input.task_id = @task_id
       AND claimed_input.role = 'user'
       AND NOT claimed_input.channel_ingested
+      -- The adopted onboarding kickoff is never a visible row, so it has no
+      -- turn boundary to correct — and reanchoring it would actively break the
+      -- one thing its position controls. It is deliberately older than the
+      -- member's message so the runtime reads "context, then their words";
+      -- moving it to dispatch time reverses that, and because the batch's two
+      -- rows would then share one timestamp, their order falls to random UUIDs
+      -- (MUL-5827).
+      AND claimed_input.message_kind <> 'onboarding_kickoff'
 )
 UPDATE chat_message AS claimed_input
 SET created_at = GREATEST(
@@ -632,6 +664,10 @@ SET created_at = sqlc.arg('assistant_created_at')::timestamptz + interval '1 mic
 WHERE queued_input.chat_session_id = $1
   AND queued_input.role = 'user'
   AND NOT queued_input.channel_ingested
+  -- Same exclusion, same reason as ReanchorClaimedDirectChatInput: the hidden
+  -- kickoff has no visible position to fix, and moving it would put the
+  -- product's context after the member's message inside one input batch.
+  AND queued_input.message_kind <> 'onboarding_kickoff'
   AND queued_input.created_at <= sqlc.arg('assistant_created_at')::timestamptz
   AND EXISTS (
     SELECT 1
@@ -1162,21 +1198,47 @@ WHERE task_id = $1 AND role = 'assistant'
 ORDER BY created_at DESC
 LIMIT 1;
 
--- name: TaskHasOnboardingKickoffInput :one
--- Whether this input batch is the product-authored onboarding kickoff. The
--- opening it produces renders the starter cards instead of suggestion chips
--- (MUL-5765), so the quick-actions pass skips that turn.
+-- name: CreateMikaOnboardingOpening :one
+-- Mika's opening reply, written by the server rather than produced by an agent
+-- run (MUL-5827). Paired with the hidden kickoff row in one transaction, which
+-- is why created_at is derived instead of defaulted: now() is the TRANSACTION
+-- timestamp, so both rows would land on the identical microsecond, and the
+-- session-list LATERAL picks the last message with `ORDER BY created_at DESC
+-- LIMIT 1` and no tiebreaker (ids are random UUIDs, not monotonic). A tie there
+-- can select the kickoff, whose kind makes buildChatLastMessage return nil — so
+-- a session that onboarded perfectly reports no last message and the "Start
+-- with Mika" recovery card reappears. One microsecond makes the order total.
 --
--- $1 is the INPUT-OWNING task id — COALESCE(task.chat_input_task_id, task.id),
--- i.e. chatInputOwnerID — never a retry clone's own id. The whole retry chain
--- consumes the root's input batch (MUL-4351), so only the root owns the
--- kickoff user row; passing a child's id here silently answers false.
-SELECT EXISTS (
-    SELECT 1 FROM chat_message
-    WHERE task_id = $1
-      AND role = 'user'
-      AND message_kind = 'onboarding_kickoff'
-);
+-- task_id stays NULL: no agent run produced this row, and nothing may treat it
+-- as a turn to regenerate or resume.
+INSERT INTO chat_message (chat_session_id, role, content, message_kind, created_at)
+VALUES (
+    sqlc.arg(chat_session_id),
+    'assistant',
+    sqlc.arg(content),
+    'onboarding_opening',
+    sqlc.arg(kickoff_created_at)::timestamptz + interval '1 microsecond'
+)
+RETURNING *;
+
+-- name: AdoptOrphanOnboardingKickoff :exec
+-- Hands the session's unowned kickoff row to the member's first real turn.
+--
+-- The kickoff is written with no task_id (nothing runs for the opening any
+-- more), so it would never reach a runtime on its own. Adopting it into the
+-- first send's input batch is what carries the onboarding skill instruction and
+-- the profile block into the run that does the first real work — and, because
+-- the kickoff quotes the opening the member already read, what stops Mika from
+-- introducing herself a second time.
+--
+-- Idempotent by construction: exactly one such row can exist per session, and
+-- the task_id IS NULL predicate means later sends adopt nothing.
+UPDATE chat_message
+SET task_id = $2
+WHERE chat_session_id = $1
+  AND role = 'user'
+  AND message_kind = 'onboarding_kickoff'
+  AND task_id IS NULL;
 
 -- name: GetLatestAssistantChatMessageForSession :one
 -- The session's most recent assistant turn, used as the regeneration target

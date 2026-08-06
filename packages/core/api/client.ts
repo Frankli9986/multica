@@ -201,6 +201,7 @@ import {
   ChatPendingTaskSchema,
   PrioritizeQueuedChatTaskResponseSchema,
   SendChatMessageResponseSchema,
+  StartMikaOnboardingResponseSchema,
   ChildIssuesResponseSchema,
   CommentsListSchema,
   CommentTriggerPreviewSchema,
@@ -2518,11 +2519,17 @@ export class ApiClient {
     },
     workspaceSlug?: string,
   ): Promise<StartMikaOnboardingResponse> {
-    return this.fetch(`/api/chat/sessions/${sessionId}/onboarding`, {
+    const raw = await this.fetch<unknown>(`/api/chat/sessions/${sessionId}/onboarding`, {
       method: "POST",
       headers: workspaceHeader(workspaceSlug),
       body: JSON.stringify(data),
     });
+    return parseWithFallback(
+      raw,
+      StartMikaOnboardingResponseSchema,
+      { started: false },
+      { endpoint: "POST /api/chat/sessions/:id/onboarding" },
+    );
   }
 
   async getPendingChatTask(sessionId: string): Promise<ChatPendingTask> {

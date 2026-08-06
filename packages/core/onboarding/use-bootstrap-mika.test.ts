@@ -53,7 +53,7 @@ beforeEach(() => {
   });
   mocks.startMikaOnboarding.mockResolvedValue({
     started: true,
-    task_id: "task-1",
+    message_id: "message-1",
     created_at: "2026-01-01T00:00:00Z",
   });
 });

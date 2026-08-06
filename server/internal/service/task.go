@@ -1848,42 +1848,7 @@ var ErrChatSessionAlreadyStarted = errors.New("chat session already has a user m
 // The caller must have already gated the session and preflighted the agent
 // (archived / no-runtime), passing the loaded agent in. Those checks are repeated
 // under the transaction locks below because either row may change before enqueue.
-func (s *TaskService) SendDirectChatMessage(ctx context.Context, session db.ChatSession, agent db.Agent, initiatorUserID pgtype.UUID, content string, attachmentIDs []pgtype.UUID, uploaderType string, uploaderID pgtype.UUID) (*DirectChatSendResult, error) {
-	return s.sendDirectChatMessage(
-		ctx,
-		session,
-		agent,
-		initiatorUserID,
-		content,
-		attachmentIDs,
-		uploaderType,
-		uploaderID,
-		protocol.ChatMessageKindMessage,
-		false,
-	)
-}
-
-// StartMikaOnboardingChat enqueues the product-authored opening turn for a
-// newly-created Mika session. The turn is stored with a dedicated message kind
-// so clients can keep it out of the visible transcript. requireEmptySession is
-// enforced under the chat-session lock, making retries and double-submits
-// idempotent even when they race.
-func (s *TaskService) StartMikaOnboardingChat(ctx context.Context, session db.ChatSession, agent db.Agent, initiatorUserID pgtype.UUID, content string, uploaderType string, uploaderID pgtype.UUID) (*DirectChatSendResult, error) {
-	return s.sendDirectChatMessage(
-		ctx,
-		session,
-		agent,
-		initiatorUserID,
-		content,
-		nil,
-		uploaderType,
-		uploaderID,
-		protocol.ChatMessageKindOnboardingKickoff,
-		true,
-	)
-}
-
-func (s *TaskService) sendDirectChatMessage(
+func (s *TaskService) SendDirectChatMessage(
 	ctx context.Context,
 	session db.ChatSession,
 	agent db.Agent,
@@ -1892,8 +1857,6 @@ func (s *TaskService) sendDirectChatMessage(
 	attachmentIDs []pgtype.UUID,
 	uploaderType string,
 	uploaderID pgtype.UUID,
-	messageKind string,
-	requireEmptySession bool,
 ) (*DirectChatSendResult, error) {
 	// Build the per-task Composio overlay before the transaction — it can do
 	// network I/O and must not run with a DB transaction open.
@@ -1941,15 +1904,6 @@ func (s *TaskService) sendDirectChatMessage(
 		if !carrier.RuntimeID.Valid {
 			return ErrChatTaskAgentNoRuntime
 		}
-		if requireEmptySession {
-			hasUserMessage, err := qtx.ChatSessionHasUserMessage(ctx, session.ID)
-			if err != nil {
-				return fmt.Errorf("check chat session input: %w", err)
-			}
-			if hasUserMessage {
-				return ErrChatSessionAlreadyStarted
-			}
-		}
 
 		// The database status of every newly-created task is "queued" until a
 		// daemon claims it. Product queue semantics are positional instead: this
@@ -1989,6 +1943,21 @@ func (s *TaskService) sendDirectChatMessage(
 		}
 		out.Task = task
 
+		// Adopt the onboarding kickoff, if this session still has an unowned one.
+		// It is written by OpenMikaOnboardingChat with no task, so this is the
+		// only thing that ever delivers it to a runtime — and it must happen
+		// before the member's own row is written, so the batch reads as
+		// "context, then their message" once ordered by created_at.
+		//
+		// A no-op for every other session: only Mika onboarding writes that kind,
+		// and only the first send of one finds it unowned.
+		if err := qtx.AdoptOrphanOnboardingKickoff(ctx, db.AdoptOrphanOnboardingKickoffParams{
+			ChatSessionID: session.ID,
+			TaskID:        task.ID,
+		}); err != nil {
+			return fmt.Errorf("adopt onboarding kickoff: %w", err)
+		}
+
 		// Create the user message already owned by this task (task_id = task.id),
 		// so it belongs to this immutable input batch the instant it exists.
 		msg, err := qtx.CreateChatMessage(ctx, db.CreateChatMessageParams{
@@ -1996,7 +1965,7 @@ func (s *TaskService) sendDirectChatMessage(
 			Role:          "user",
 			Content:       content,
 			TaskID:        task.ID,
-			MessageKind:   pgtype.Text{String: messageKind, Valid: true},
+			MessageKind:   pgtype.Text{String: protocol.ChatMessageKindMessage, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("create user chat message: %w", err)
@@ -2037,6 +2006,89 @@ func (s *TaskService) sendDirectChatMessage(
 	// Notify only after commit. See EnqueueTaskForIssue for ordering rationale.
 	s.broadcastTaskEvent(ctx, protocol.EventTaskQueued, out.Task)
 	s.NotifyTaskEnqueued(ctx, out.Task)
+	return &out, nil
+}
+
+// MikaOnboardingOpenResult carries the two rows that open a Mika conversation.
+type MikaOnboardingOpenResult struct {
+	// Kickoff is the hidden product context. It is written WITHOUT a task —
+	// the member's first real send adopts it (AdoptOrphanOnboardingKickoff).
+	Kickoff db.ChatMessage
+	// Opening is what the member reads, already final. No agent produced it,
+	// so it carries no task id, no elapsed time, and nothing to regenerate.
+	Opening db.ChatMessage
+}
+
+// OpenMikaOnboardingChat writes a Mika conversation's first two rows in one
+// transaction: the hidden kickoff and the product-authored opening the member
+// sees (MUL-5827). Nothing is enqueued — this used to be a full chat task, and
+// the member waited out a runtime cold start to read a reply the product had
+// already decided word for word.
+//
+// "Session is still empty" is enforced under the chat-session lock, so retries,
+// React double-submits, and two clients racing the same session still produce
+// at most one opening. The kickoff row is what makes that check work: it is a
+// role='user' row, so ChatSessionHasUserMessage sees it exactly as it saw the
+// old kickoff turn.
+func (s *TaskService) OpenMikaOnboardingChat(ctx context.Context, session db.ChatSession, kickoff, opening string) (*MikaOnboardingOpenResult, error) {
+	var out MikaOnboardingOpenResult
+	if err := s.runInTx(ctx, func(qtx *db.Queries) error {
+		// Same lock and lock ORDER as the send path, so an opening racing a
+		// first send or a runtime rebind serializes instead of deadlocking.
+		if _, err := qtx.LockChatSessionForRuntimeBind(ctx, session.ID); err != nil {
+			return fmt.Errorf("lock chat session: %w", err)
+		}
+		current, err := qtx.GetChatSession(ctx, session.ID)
+		if err != nil {
+			return fmt.Errorf("reload chat session: %w", err)
+		}
+		if current.Status != "active" {
+			return ErrChatSessionArchived
+		}
+		hasUserMessage, err := qtx.ChatSessionHasUserMessage(ctx, session.ID)
+		if err != nil {
+			return fmt.Errorf("check chat session input: %w", err)
+		}
+		if hasUserMessage {
+			return ErrChatSessionAlreadyStarted
+		}
+
+		kickoffRow, err := qtx.CreateChatMessage(ctx, db.CreateChatMessageParams{
+			ChatSessionID: session.ID,
+			Role:          "user",
+			Content:       kickoff,
+			MessageKind:   pgtype.Text{String: protocol.ChatMessageKindOnboardingKickoff, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("create onboarding kickoff: %w", err)
+		}
+		out.Kickoff = kickoffRow
+
+		// Ordered one microsecond after the kickoff — see the query comment for
+		// why a shared transaction timestamp is not good enough here.
+		openingRow, err := qtx.CreateMikaOnboardingOpening(ctx, db.CreateMikaOnboardingOpeningParams{
+			ChatSessionID:    session.ID,
+			KickoffCreatedAt: kickoffRow.CreatedAt,
+			Content:          opening,
+		})
+		if err != nil {
+			return fmt.Errorf("create onboarding opening: %w", err)
+		}
+		out.Opening = openingRow
+
+		if err := qtx.TouchChatSession(ctx, session.ID); err != nil {
+			return fmt.Errorf("touch chat session: %w", err)
+		}
+		return nil
+	}); err != nil {
+		if !errors.Is(err, ErrChatSessionAlreadyStarted) {
+			slog.Error("mika onboarding open failed",
+				"chat_session_id", util.UUIDToString(session.ID),
+				"agent_id", util.UUIDToString(session.AgentID),
+				"error", err)
+		}
+		return nil, err
+	}
 	return &out, nil
 }
 
@@ -2405,7 +2457,7 @@ func (s *TaskService) settleQueuedChatInput(
 			return nil, fmt.Errorf("detach edited queued chat attachments: %w", err)
 		}
 	}
-	deleted, err := qtx.DeleteUserChatMessageByTask(ctx, inputOwnerID)
+	deleted, err := deleteUserChatInput(ctx, qtx, inputOwnerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -2437,6 +2489,18 @@ func (s *TaskService) settleQueuedChatInput(
 	cancelled.RestoreToInput = true
 	cancelled.Attachments = detached
 	return cancelled, nil
+}
+
+// deleteUserChatInput removes a cancelled/edited turn's member-typed input and
+// releases any onboarding kickoff the turn had adopted, so the member's next
+// send picks the kickoff up again (MUL-5827). The two must happen together:
+// deleting the input while leaving the kickoff bound to the dead task would
+// strand the onboarding context on a run that will never happen.
+func deleteUserChatInput(ctx context.Context, qtx *db.Queries, inputOwnerID pgtype.UUID) (db.ChatMessage, error) {
+	if err := qtx.ReleaseOnboardingKickoffFromTask(ctx, inputOwnerID); err != nil {
+		return db.ChatMessage{}, fmt.Errorf("release onboarding kickoff: %w", err)
+	}
+	return qtx.DeleteUserChatMessageByTask(ctx, inputOwnerID)
 }
 
 func (s *TaskService) finalizeCancelledChatMessage(ctx context.Context, task db.AgentTaskQueue, opts CancelTaskOptions) *CancelledChatMessageResult {
@@ -2502,22 +2566,21 @@ func (s *TaskService) finalizeCancelledChatMessage(ctx context.Context, task db.
 			if err != nil {
 				return fmt.Errorf("detach cancelled chat message attachments: %w", err)
 			}
-			deleted, err := qtx.DeleteUserChatMessageByTask(ctx, inputOwnerID)
+			deleted, err := deleteUserChatInput(ctx, qtx, inputOwnerID)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}
 			if err != nil {
 				return fmt.Errorf("delete empty cancelled chat user message: %w", err)
 			}
+			// Always restorable now: the delete cannot return a kickoff row, so
+			// what comes back is always what the member typed (MUL-5827).
 			cancelled = &CancelledChatMessageResult{
 				ChatSessionID:  util.UUIDToString(deleted.ChatSessionID),
 				MessageID:      util.UUIDToString(deleted.ID),
 				Content:        deleted.Content,
-				RestoreToInput: deleted.MessageKind != protocol.ChatMessageKindOnboardingKickoff,
+				RestoreToInput: true,
 				Attachments:    detached,
-			}
-			if deleted.MessageKind == protocol.ChatMessageKindOnboardingKickoff {
-				cancelled.Content = ""
 			}
 			return nil
 		}
@@ -2630,21 +2693,13 @@ func (s *TaskService) FinalizeDeferredCancelledChat(ctx context.Context, taskID 
 			if err != nil {
 				return fmt.Errorf("detach cancelled chat message attachments: %w", err)
 			}
-			deleted, err := qtx.DeleteUserChatMessageByTask(ctx, inputOwnerID)
+			deleted, err := deleteUserChatInput(ctx, qtx, inputOwnerID)
 			if errors.Is(err, pgx.ErrNoRows) {
 				payload.Outcome = ""
 				return nil
 			}
 			if err != nil {
 				return fmt.Errorf("delete empty cancelled chat user message: %w", err)
-			}
-			if deleted.MessageKind == protocol.ChatMessageKindOnboardingKickoff {
-				// The hidden kickoff was authored by the product, not typed by
-				// the member. Delete it like any empty cancelled input batch,
-				// but never persist it as a composer draft.
-				payload.Outcome = protocol.ChatCancelOutcomeRestored
-				payload.MessageID = util.UUIDToString(deleted.ID)
-				return nil
 			}
 			attachmentIDs := make([]pgtype.UUID, 0, len(detached))
 			for _, a := range detached {
@@ -3624,25 +3679,14 @@ func (s *TaskService) writeChatCompletionOutcome(ctx context.Context, qtx *db.Qu
 	switch {
 	case !isEmpty:
 		params.Content = redact.Text(body)
-		// message_kind left NULL → COALESCE defaults to 'message'. The one
-		// exception: the reply to the hidden onboarding kickoff self-describes
-		// as the opening, which is what makes chat render the starter cards
-		// under it — the kickoff row itself never reaches clients (MUL-5765).
+		// message_kind left NULL → COALESCE defaults to 'message'.
 		//
-		// Keyed on chatInputOwnerID, not task.ID: an auto-retry clone gets a
-		// fresh id while inheriting the root's chat_input_task_id (MUL-4351),
-		// and the kickoff user row stays bound to the root. Asking about the
-		// child's own id would answer false, so an opening that only landed
-		// after a retriable failure would persist as a plain 'message' — no
-		// starter cards, and chips generated for a turn whose copy points at
-		// cards that never render.
-		kickoff, err := qtx.TaskHasOnboardingKickoffInput(ctx, chatInputOwnerID(task))
-		if err != nil {
-			return nil, fmt.Errorf("check onboarding kickoff input: %w", err)
-		}
-		if kickoff {
-			params.MessageKind = pgtype.Text{String: protocol.ChatMessageKindOnboardingOpening, Valid: true}
-		}
+		// This used to stamp 'onboarding_opening' when the turn's input batch
+		// contained the kickoff, back when the kickoff was a turn of its own.
+		// The server writes the opening directly now (MUL-5827) and the kickoff
+		// rides into the member's FIRST REAL turn — so that rule would stamp
+		// their first answer as the opening and render the starter cards a
+		// second time, under a reply that is not an opening at all.
 	case pendingAttachments > 0:
 		// Image/file-only reply: a real 'message' outcome with empty text — the
 		// attachment cards ARE the response, so it must not read as no_response.
