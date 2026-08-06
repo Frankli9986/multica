@@ -884,3 +884,114 @@ describe("createMentionSuggestion", () => {
     expect(items.some((i) => i.type === "agent" && i.label === "魏和尚")).toBe(true);
   });
 });
+
+// MUL-5824: the search API already demotes cancelled issues, but the picker
+// merges its local cache AHEAD of the server results and only then truncates to
+// MAX_ITEMS — so a cached cancelled row could both outrank and crowd out live
+// work the backend had deliberately ranked above it.
+describe("MentionList cancelled demotion", () => {
+  beforeEach(() => {
+    searchIssuesMock.mockReset();
+    searchProjectsMock.mockReset();
+    searchIssuesMock.mockResolvedValue({ issues: [], total: 0 });
+    searchProjectsMock.mockResolvedValue({ projects: [], total: 0 });
+  });
+
+  // Rendered top-to-bottom order of the issue rows. textContent runs the
+  // identifier straight into the title, so match the identifier off the front.
+  const issueLabels = () =>
+    Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+      .map((b) => (b.textContent ?? "").match(/^MUL-\d+/)?.[0])
+      .filter((label): label is string => !!label);
+
+  it("sorts cancelled issues below live ones regardless of input order", () => {
+    const items: MentionItem[] = [
+      { id: "i-1", label: "MUL-1", type: "issue", status: "cancelled" },
+      { id: "i-2", label: "MUL-2", type: "issue", status: "in_progress" },
+      { id: "i-3", label: "MUL-3", type: "issue", status: "cancelled" },
+      { id: "i-4", label: "MUL-4", type: "issue", status: "backlog" },
+    ];
+
+    render(<I18nWrapper><MentionList items={items} query="" command={vi.fn()} /></I18nWrapper>);
+
+    // Live rows keep their relative order; cancelled rows keep theirs too.
+    expect(issueLabels()).toEqual(["MUL-2", "MUL-4", "MUL-1", "MUL-3"]);
+  });
+
+  it("gives up the slot, not just the position, when the list overflows", () => {
+    // 20 cancelled rows ahead of one live row: with only 20 slots the live row
+    // is invisible unless the demotion runs BEFORE the truncation.
+    const items: MentionItem[] = [
+      ...Array.from({ length: 20 }, (_, n) => ({
+        id: `i-c${n}`,
+        label: `MUL-${100 + n}`,
+        type: "issue" as const,
+        status: "cancelled" as const,
+      })),
+      { id: "i-live", label: "MUL-9", type: "issue", status: "todo" },
+    ];
+
+    render(<I18nWrapper><MentionList items={items} query="" command={vi.fn()} /></I18nWrapper>);
+
+    const labels = issueLabels();
+    expect(labels).toHaveLength(20);
+    expect(labels[0]).toBe("MUL-9");
+    // One cancelled row was dropped to make room, not the live one.
+    expect(labels).not.toContain("MUL-119");
+  });
+
+  it("keeps a cancelled issue you are currently viewing in its Current section", () => {
+    // "Current" is explicit context, not a relevance hit — demoting it past the
+    // truncation would make the issue on screen vanish from its own picker.
+    const items: MentionItem[] = [
+      { id: "i-cur", label: "MUL-7", type: "issue", status: "cancelled", group: "current" },
+      { id: "i-live", label: "MUL-8", type: "issue", status: "in_progress" },
+    ];
+
+    render(
+      <I18nWrapper>
+        <MentionList items={items} query="" command={vi.fn()} includeProjectSearch />
+      </I18nWrapper>,
+    );
+
+    expect(screen.getByText("Current page")).toBeInTheDocument();
+    expect(issueLabels()).toEqual(["MUL-7", "MUL-8"]);
+  });
+
+  it("does not reorder server results, which the API already ranked", async () => {
+    searchIssuesMock.mockResolvedValue({
+      issues: [
+        { id: "i-a", identifier: "MUL-11", title: "Live match", status: "todo" },
+        { id: "i-b", identifier: "MUL-12", title: "Cancelled match", status: "cancelled" },
+      ],
+      total: 2,
+    });
+
+    render(<I18nWrapper><MentionList items={[]} query="match" command={vi.fn()} /></I18nWrapper>);
+
+    await waitFor(() => {
+      expect(screen.getByText("MUL-11")).toBeInTheDocument();
+    });
+    expect(issueLabels()).toEqual(["MUL-11", "MUL-12"]);
+  });
+
+  it("demotes a cached cancelled row below a server-ranked live one", async () => {
+    searchIssuesMock.mockResolvedValue({
+      issues: [{ id: "i-live", identifier: "MUL-21", title: "Live match", status: "in_progress" }],
+      total: 1,
+    });
+
+    // The cached row is merged first; without the demotion it would render on
+    // top of the server's higher-ranked live match.
+    const items: MentionItem[] = [
+      { id: "i-cached", label: "MUL-20", type: "issue", status: "cancelled", description: "Cancelled match" },
+    ];
+
+    render(<I18nWrapper><MentionList items={items} query="match" command={vi.fn()} /></I18nWrapper>);
+
+    await waitFor(() => {
+      expect(screen.getByText("MUL-21")).toBeInTheDocument();
+    });
+    expect(issueLabels()).toEqual(["MUL-21", "MUL-20"]);
+  });
+});

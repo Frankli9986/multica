@@ -159,6 +159,37 @@ function mergeMentionItems(
   return merged;
 }
 
+/**
+ * Cancelled issues are abandoned work: keep them reachable but never ahead of a
+ * live match. Cached rows are merged before server rows and the list is only
+ * then truncated to MAX_ITEMS, so without this a locally cached cancelled issue
+ * outranks every backend-ranked result and can push active issues out of the
+ * window entirely — undoing the demotion the search API already applies.
+ *
+ * Stable partition: relative order within each side is untouched, so the
+ * backend ranking still decides everything else. Runs before the truncation,
+ * not just before render, so cancelled rows give up their slot rather than
+ * merely their position.
+ *
+ * Curated groups (current / recent / search) are exempt — they are explicit
+ * context rather than relevance hits, and "Current" has to survive the
+ * truncation even when the issue being viewed is itself cancelled.
+ */
+function demoteCancelledIssues(items: MentionItem[]): MentionItem[] {
+  const live: MentionItem[] = [];
+  const cancelled: MentionItem[] = [];
+
+  for (const item of items) {
+    if (item.type === "issue" && item.status === "cancelled" && !item.group) {
+      cancelled.push(item);
+    } else {
+      live.push(item);
+    }
+  }
+
+  return cancelled.length > 0 ? [...live, ...cancelled] : items;
+}
+
 export const MentionList = forwardRef<MentionListRef, MentionListProps>(
   function MentionList({ items, query, command, includeProjectSearch = false }, ref) {
     const { t } = useT("editor");
@@ -252,7 +283,9 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
 
     const displayItems = useMemo(() => {
       const currentServerItems = searchedQuery === normalizedQuery ? serverItems : [];
-      return mergeMentionItems(items, currentServerItems).slice(0, MAX_ITEMS);
+      return demoteCancelledIssues(
+        mergeMentionItems(items, currentServerItems),
+      ).slice(0, MAX_ITEMS);
     }, [items, normalizedQuery, searchedQuery, serverItems]);
 
     // The single index space for selection. groupItems() re-buckets displayItems
