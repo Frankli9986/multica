@@ -282,7 +282,6 @@ Agent-specific overrides:
 | `MULTICA_QWEN_MODEL` | Override the Qwen Code model used |
 | `MULTICA_QWEN_ARGS` | Daemon-wide extra Qwen arguments (POSIX shellword parsing; managed protocol flags are filtered) |
 | `MULTICA_QWENPAW_PATH` | Custom path to the `qwenpaw` binary |
-| `MULTICA_QWENPAW_MODEL` | Seeds the daemon-wide default model. QwenPaw does not accept a per-agent model override — its `session/set_model` writes to QwenPaw's shared, persistent config rather than the session, so Multica leaves model selection to QwenPaw itself |
 | `MULTICA_QWENPAW_ARGS` | Daemon-wide extra QwenPaw arguments (POSIX shellword parsing; managed protocol flags are filtered) |
 
 If a previously generated `~/.multica/hooks` wrapper is first on `PATH` and calls the same command name again, the daemon skips that hooks directory during built-in agent discovery and records the real binary path behind it. If your interactive shell still recurses when you run `claude`, `codex`, or `hermes` manually, remove the hooks entry from your shell startup file or replace the wrapper body with an absolute `exec /path/to/real-binary "$@"`.
@@ -291,7 +290,7 @@ The daemon launches Qoder and Qoder CN as `qodercli --yolo --acp` and `qoderclic
 The daemon launches Qwen Code as `qwen -p <prompt> --output-format stream-json`. It writes the task brief to `QWEN.md`; when an agent has managed `mcp_config`, the daemon writes a 0600 per-run JSON file and passes it through `--mcp-config <path>`, then removes it after the process exits. A null config preserves Qwen Code native MCP settings.
 
 
-The daemon launches QwenPaw as `qwenpaw acp --workspace <per-task dir>`. It writes the task brief to `AGENTS.md`, and materialises the run's bound skills into `<per-task dir>/skills/` plus a `skill.json` manifest, so QwenPaw discovers them through its own workspace skill discovery. `acp` and `--workspace` are reserved: `custom_args` cannot override them.
+The daemon launches QwenPaw as `qwenpaw acp --workspace <per-task dir>`. It writes the task brief to `AGENTS.md`, and materialises the run's bound skills into `<per-task dir>/skills/` plus a `skill.json` manifest, so QwenPaw discovers them through its own workspace skill discovery. `acp` and `--workspace` are reserved: `custom_args` cannot override them. QwenPaw is the one runtime with no `MULTICA_QWENPAW_MODEL`: its `session/set_model` writes to a shared, persistent agent config rather than the session, so Multica never sends it a model and leaves that choice to QwenPaw's own configuration.
 
 `MULTICA_CLAUDE_ARGS`, `MULTICA_CODEX_ARGS`, `MULTICA_CODEBUDDY_ARGS`, `MULTICA_QWEN_ARGS`, and `MULTICA_QWENPAW_ARGS` are parsed with POSIX shellword quoting, so values such as `--model "gpt-5.1 codex" --sandbox read-only` are split like a shell command line. Agent arguments are applied in this order: hardcoded Multica defaults, daemon-wide env defaults, then per-agent `custom_args` from the task.
 
