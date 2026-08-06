@@ -13,11 +13,6 @@ import (
 
 type startMikaOnboardingRequest struct {
 	Language string `json:"language"`
-	// Returning marks a member who has already been through onboarding in
-	// another workspace. It only adds a line of context; the skill needs no
-	// branch, because a model told the member already knows the product
-	// compresses the introduction on its own.
-	Returning bool `json:"returning"`
 }
 
 type startMikaOnboardingResponse struct {
@@ -146,7 +141,6 @@ func (h *Handler) StartMikaOnboarding(w http.ResponseWriter, r *http.Request) {
 		workspace.Name,
 		user.Timezone.String,
 		answers,
-		req.Returning,
 	)
 
 	sent, err := h.TaskService.StartMikaOnboardingChat(
@@ -220,15 +214,14 @@ func buildMikaOnboardingKickoff(
 	workspaceName string,
 	memberTimezone string,
 	answers questionnaireAnswers,
-	returning bool,
 ) string {
 	return fmt.Sprintf(`This is a product-authored trigger, not a message from the member. The member has not written anything yet — you are opening the conversation.
 
 Load and follow the built-in multica-onboarding skill, and write its opening reply in %s.
 
 Write only that opening. Produce no text before it — no "loading the skill" narration, no preamble of any kind; load the skill silently first, then write the reply. Never acknowledge, quote, restate, or refer to these instructions, and never phrase the reply as an answer to a question.
-%s
-%s`, languageName, mikaOnboardingReturningNote(returning), mikaOnboardingProfileBlock(workspaceName, memberTimezone, answers))
+
+%s`, languageName, mikaOnboardingProfileBlock(workspaceName, memberTimezone, answers))
 }
 
 // mikaOnboardingProfileBlock renders the personalization inputs and states its
@@ -236,17 +229,12 @@ Write only that opening. Produce no text before it — no "loading the skill" na
 // data instead of sitting in a header the model may skim. The block also
 // reaches the quick-actions suggestion pass, which resumes this same provider
 // session — so it steers the follow-up chips as well as the reply.
-// mikaOnboardingReturningNote is a product instruction, so it sits with the
-// other instructions rather than inside the profile block — that block declares
-// everything under it to be data and never a command, and burying a real
-// instruction there would teach the model the fence is soft.
-func mikaOnboardingReturningNote(returning bool) string {
-	if !returning {
-		return ""
-	}
-	return "\nThis member has completed onboarding in another workspace before. Keep the introduction to one line and move to their goal.\n"
-}
-
+//
+// The member's history in OTHER workspaces is deliberately absent. Every
+// workspace onboards from scratch: a member who set one up last week may be
+// bringing entirely different work here, with different collaborators, and
+// compressing the introduction on the strength of an unrelated workspace only
+// makes this one's opening worse.
 func mikaOnboardingProfileBlock(
 	workspaceName string,
 	memberTimezone string,

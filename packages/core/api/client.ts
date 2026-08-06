@@ -2515,8 +2515,6 @@ export class ApiClient {
     sessionId: string,
     data: {
       language: "en" | "zh" | "ko" | "ja";
-      /** True when this member has onboarded in another workspace already. */
-      returning?: boolean;
     },
     workspaceSlug?: string,
   ): Promise<StartMikaOnboardingResponse> {

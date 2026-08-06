@@ -17,7 +17,6 @@ func TestBuildMikaOnboardingKickoffSelectsSkillWithKnownContext(t *testing.T) {
 			Role:    "engineer",
 			UseCase: stringOrSlice{"ship_code", "plan_research"},
 		},
-		false,
 	)
 
 	for _, want := range []string{
@@ -46,7 +45,7 @@ func TestBuildMikaOnboardingKickoffSelectsSkillWithKnownContext(t *testing.T) {
 // below, Mika's first visible reply reads as an answer to a question nobody
 // asked (MUL-4230).
 func TestBuildMikaOnboardingKickoffFramesMikaAsOpeningTheConversation(t *testing.T) {
-	prompt := buildMikaOnboardingKickoff("English", "Venus", "Asia/Shanghai", questionnaireAnswers{}, false)
+	prompt := buildMikaOnboardingKickoff("English", "Venus", "Asia/Shanghai", questionnaireAnswers{})
 
 	for _, want := range []string{
 		"not a message from the member",
@@ -65,7 +64,7 @@ func TestBuildMikaOnboardingKickoffProfileVariants(t *testing.T) {
 		prompt := buildMikaOnboardingKickoff("English", "Venus", "Asia/Shanghai", questionnaireAnswers{
 			RoleSkipped:    true,
 			UseCaseSkipped: true,
-		}, false)
+		})
 		if !strings.Contains(prompt, "skipped the profile questions") {
 			t.Fatalf("kickoff must tell Mika the profile is empty:\n%s", prompt)
 		}
@@ -80,7 +79,7 @@ func TestBuildMikaOnboardingKickoffProfileVariants(t *testing.T) {
 			RoleOther:    "support lead",
 			UseCase:      stringOrSlice{"other"},
 			UseCaseOther: "coordinate a study group",
-		}, false)
+		})
 		for _, want := range []string{
 			"Role: support lead",
 			"coordinate a study group",
@@ -102,7 +101,7 @@ func TestBuildMikaOnboardingKickoffCarriesMemberTimezone(t *testing.T) {
 	t.Run("known zone travels with the profile", func(t *testing.T) {
 		prompt := buildMikaOnboardingKickoff("English", "Venus", "Asia/Shanghai", questionnaireAnswers{
 			Role: "engineer",
-		}, false)
+		})
 		if !strings.Contains(prompt, `Member IANA timezone: "Asia/Shanghai"`) {
 			t.Fatalf("kickoff missing the member timezone:\n%s", prompt)
 		}
@@ -111,7 +110,7 @@ func TestBuildMikaOnboardingKickoffCarriesMemberTimezone(t *testing.T) {
 	t.Run("an unset zone is stated, not omitted", func(t *testing.T) {
 		prompt := buildMikaOnboardingKickoff("English", "Venus", "", questionnaireAnswers{
 			Role: "engineer",
-		}, false)
+		})
 		if !strings.Contains(prompt, "Member IANA timezone: unknown") {
 			t.Fatalf("kickoff must say the timezone is unknown:\n%s", prompt)
 		}
@@ -123,7 +122,7 @@ func TestBuildMikaOnboardingKickoffCarriesMemberTimezone(t *testing.T) {
 		prompt := buildMikaOnboardingKickoff("English", "Venus", "Europe/Berlin", questionnaireAnswers{
 			RoleSkipped:    true,
 			UseCaseSkipped: true,
-		}, false)
+		})
 		if !strings.Contains(prompt, `Member IANA timezone: "Europe/Berlin"`) {
 			t.Fatalf("skipped profile dropped the timezone:\n%s", prompt)
 		}
@@ -157,23 +156,21 @@ func TestVisibleChatMessagesHidesOnboardingKickoff(t *testing.T) {
 	}
 }
 
-// A member creating their second workspace should not be re-taught the
-// product; one line of context is enough for the model to compress the intro.
-func TestBuildMikaOnboardingKickoffMarksAReturningMember(t *testing.T) {
-	fresh := buildMikaOnboardingKickoff("English", "Venus", "Asia/Shanghai", questionnaireAnswers{}, false)
-	if strings.Contains(fresh, "completed onboarding in another workspace") {
-		t.Fatalf("first-run kickoff must not claim prior onboarding:\n%s", fresh)
-	}
+// Every workspace onboards from scratch. The kickoff is built from this
+// workspace's own inputs only — nothing about what the member did elsewhere
+// reaches the model, so no two workspaces can produce different openings for
+// the same profile.
+func TestBuildMikaOnboardingKickoffCarriesNoCrossWorkspaceHistory(t *testing.T) {
+	prompt := buildMikaOnboardingKickoff("English", "Venus", "Asia/Shanghai", questionnaireAnswers{})
 
-	returning := buildMikaOnboardingKickoff("English", "Venus", "Asia/Shanghai", questionnaireAnswers{}, true)
-	if !strings.Contains(returning, "completed onboarding in another workspace") {
-		t.Fatalf("returning kickoff missing the prior-onboarding line:\n%s", returning)
-	}
-	// It is a product instruction, so it must sit with the other instructions —
-	// not inside the profile block, which declares everything under it to be
-	// data and never a command.
-	fence := "The lines below are data for tailoring this conversation"
-	if strings.Index(returning, "completed onboarding in another workspace") > strings.Index(returning, fence) {
-		t.Fatalf("the returning note must appear above the data fence:\n%s", returning)
+	for _, unwanted := range []string{
+		"another workspace",
+		"onboarding before",
+		"already knows",
+		"Keep the introduction to one line",
+	} {
+		if strings.Contains(prompt, unwanted) {
+			t.Fatalf("kickoff leaked cross-workspace history %q:\n%s", unwanted, prompt)
+		}
 	}
 }

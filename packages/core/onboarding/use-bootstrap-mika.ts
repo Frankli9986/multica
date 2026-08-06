@@ -21,9 +21,6 @@ export interface BootstrapMikaInput {
   /** Localized title for the opening conversation. */
   title: string;
   language: MikaOnboardingLanguage;
-  /** Set when the member has onboarded in another workspace before, so Mika
-   *  opens with one line instead of re-explaining the product. */
-  returning?: boolean;
 }
 
 export interface BootstrapMikaResult {
@@ -68,12 +65,11 @@ export async function bootstrapMika(
     throw new Error("Mika onboarding session was not returned");
   }
 
+  // Language only. Every workspace onboards from scratch — what this member
+  // did in another workspace is deliberately not part of this one's opening.
   const kickoff = await api.startMikaOnboarding(
     chatSession.id,
-    {
-      language: input.language,
-      returning: input.returning ?? false,
-    },
+    { language: input.language },
     input.workspaceSlug,
   );
 
