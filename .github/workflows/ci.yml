@@ -83,6 +83,21 @@ jobs:
           fi
 
   # The frontend validation is split across two runners on purpose. Both
+  # The runtime roster used to be repeated five times per README, so adding a
+  # provider meant ten hand edits and four of them silently went missing
+  # (MUL-5812). Each README now carries the roster once, and this job keeps both
+  # tables identical to scripts/agent-cli-command-names.txt. Deliberately not
+  # gated on `changes`: a PR that adds a runtime touches the backend, not the
+  # frontend, and that is exactly the PR this needs to catch.
+  readme-runtimes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check the README runtime tables
+        run: scripts/check-readme-runtimes.sh
+
   # `@multica/web:build` (a webpack production build) and `@multica/views:test`
   # (259 jsdom files) are CPU-saturating, and a standard runner only has
   # 4 vCPUs. Running them in one job made them starve each other: the views
