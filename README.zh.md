@@ -18,7 +18,7 @@ Multica 是一个开源的团队工作区。你像给同事派活一样，把任
 [![GitHub stars](https://img.shields.io/github/stars/multica-ai/multica?style=flat)](https://github.com/multica-ai/multica/stargazers)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/W8gYBn226t)
 
-[官网](https://multica.ai) · [文档](https://multica.ai/docs) · [快速开始](https://multica.ai/docs/cloud-quickstart) · [愿景](VISION.zh.md) · [自部署](SELF_HOSTING.md) · [Discord](https://discord.gg/W8gYBn226t) · [X](https://x.com/MulticaAI)
+[官网](https://multica.ai) · [文档](https://multica.ai/docs) · [快速开始](https://multica.ai/docs/cloud-quickstart) · [下载](https://multica.ai/download) · [愿景](VISION.zh.md) · [自部署](SELF_HOSTING.md) · [Discord](https://discord.gg/W8gYBn226t) · [X](https://x.com/MulticaAI)
 
 **[English](README.md) | 简体中文**
 
@@ -89,35 +89,14 @@ diff，全都挂在同一个任务下——没人需要重新捋一遍上下文�
 
 ---
 
-## 快速安装
+## 开始使用
 
-<details open>
-<summary><b>macOS / Linux</b></summary>
+不用打开终端：直接在 **[multica.ai](https://multica.ai)** 注册，或者下载
+**[Multica 桌面端](https://multica.ai/download)**（macOS / Windows / Linux）——它会自动把自己
+所在的这台电脑注册成运行时。
 
-<br/>
-
-```bash
-brew install multica-ai/tap/multica
-```
-
-没装 Homebrew？安装脚本会直接下载二进制：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash
-```
-
-</details>
-
-<details>
-<summary><b>Windows (PowerShell)</b></summary>
-
-<br/>
-
-```powershell
-irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex
-```
-
-</details>
+唯一的前提：跑智能体的那台机器上，至少装好并登录一个[受支持的智能体 CLI](#运行时)——
+Claude Code、Codex、Cursor 都行。Multica 负责驱动它们，但不替你安装。
 
 <details>
 <summary><b>整套自部署</b></summary>
@@ -129,7 +108,8 @@ curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/ins
 multica setup self-host
 ```
 
-Windows 上先设 `$env:MULTICA_MODE="with-server"`，再跑 PowerShell 安装脚本。
+Windows 上先设 `$env:MULTICA_MODE="with-server"`，再跑 PowerShell 安装脚本：
+`irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex`。
 
 这会拉取 GHCR 上的官方镜像，需要 Docker。详见[自部署指南](SELF_HOSTING.md)。如果你选的 GHCR
 标签还没发布，可以在代码目录里跑 `make selfhost-build` 兜底。
@@ -140,20 +120,16 @@ Windows 上先设 `$env:MULTICA_MODE="with-server"`，再跑 PowerShell 安装�
 
 ## 五分钟跑通第一个智能体
 
-**1. 启动守护进程。**
+**1. 登录。** 在浏览器里打开 [multica.ai](https://multica.ai)，或者打开
+[Multica 桌面端](https://multica.ai/download)。
 
-```bash
-multica setup          # 配置、认证、启动守护进程
-```
+**2. 接入一台电脑。** 所谓*运行时*，就是智能体干活用的机器——你的笔记本，或者一台云主机。桌面端
+会自动把它所在的电脑注册成运行时，并检测上面装了哪些智能体 CLI；用网页版、或者想再接一台机器，就
+打开侧边栏的**运行时**，点右上角的**添加电脑**，把弹窗里的两条命令粘到那台机器的终端里。
 
-它在后台运行，并自动检测你 `PATH` 上装了哪些[智能体 CLI](#运行时)。
-
-**2. 确认运行时。** 打开侧边栏的**运行时**，你的机器应该已经在列表里，状态是在线。所谓*运行时*，
-就是任何一台能执行智能体任务的机器——你的笔记本，或者一台云主机。它会上报自己装了哪些智能体 CLI，
-Multica 据此决定活能派到哪儿去。
-
-**3. 创建智能体。** 打开侧边栏的 **Agents**，点**新建智能体**。选中你刚连上的运行时，选一个
-provider，起个名字。这个名字就是它之后在看板和评论里的身份。
+**3. 创建智能体。** 打开侧边栏的**智能体**，点**新建智能体**。选中刚接入的运行时，选一个
+provider，起个名字——也可以走**通过 AI 创建**，描述一句就生成配置。这个名字就是它之后在看板和
+评论里的身份。
 
 **4. 派给它一件事。** 建一个任务，负责人选成这个智能体。它会自己接手、在你的机器上跑、边做边评论，
 干完把任务挪到审核中。

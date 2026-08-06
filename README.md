@@ -19,7 +19,7 @@ back for review. Self-hostable, works with 20 agent CLIs, no lock-in.
 [![GitHub stars](https://img.shields.io/github/stars/multica-ai/multica?style=flat)](https://github.com/multica-ai/multica/stargazers)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/W8gYBn226t)
 
-[Website](https://multica.ai) · [Docs](https://multica.ai/docs) · [Quickstart](https://multica.ai/docs/cloud-quickstart) · [Vision](VISION.md) · [Self-Hosting](SELF_HOSTING.md) · [Discord](https://discord.gg/W8gYBn226t) · [X](https://x.com/MulticaAI)
+[Website](https://multica.ai) · [Docs](https://multica.ai/docs) · [Quickstart](https://multica.ai/docs/cloud-quickstart) · [Download](https://multica.ai/download) · [Vision](VISION.md) · [Self-Hosting](SELF_HOSTING.md) · [Discord](https://discord.gg/W8gYBn226t) · [X](https://x.com/MulticaAI)
 
 **English | [简体中文](README.zh.md)**
 
@@ -92,35 +92,15 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 
 ---
 
-## Quick install
+## Get started
 
-<details open>
-<summary><b>macOS / Linux</b></summary>
+No terminal required: sign up at **[multica.ai](https://multica.ai)**, or download
+**[Multica Desktop](https://multica.ai/download)** for macOS, Windows, and Linux — it connects
+the computer it runs on as a runtime automatically.
 
-<br/>
-
-```bash
-brew install multica-ai/tap/multica
-```
-
-No Homebrew? The install script downloads the binary directly:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash
-```
-
-</details>
-
-<details>
-<summary><b>Windows (PowerShell)</b></summary>
-
-<br/>
-
-```powershell
-irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex
-```
-
-</details>
+The one prerequisite: the machine that will run agents needs at least one
+[supported agent CLI](#runtimes) installed and signed in — Claude Code, Codex, Cursor, and
+friends. Multica drives them; it doesn't ship them.
 
 <details>
 <summary><b>Self-hosting the whole thing</b></summary>
@@ -132,7 +112,8 @@ curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/ins
 multica setup self-host
 ```
 
-On Windows, set `$env:MULTICA_MODE="with-server"` before running the PowerShell installer.
+On Windows, set `$env:MULTICA_MODE="with-server"`, then run the PowerShell installer:
+`irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex`.
 
 This pulls the official images from GHCR and requires Docker. See the
 [Self-Hosting Guide](SELF_HOSTING.md); if the selected GHCR tag has not been published yet,
@@ -144,21 +125,17 @@ fall back to `make selfhost-build` from a checkout.
 
 ## Your first agent in five minutes
 
-**1. Start the daemon.**
+**1. Sign in.** [multica.ai](https://multica.ai) in the browser, or open
+[Multica Desktop](https://multica.ai/download).
 
-```bash
-multica setup          # configure, authenticate, and start the daemon
-```
-
-It runs in the background and auto-detects which [agent CLIs](#runtimes) are on your `PATH`.
-
-**2. Confirm the runtime.** Open **Runtimes** in the sidebar; your machine should be listed and
-active. A *runtime* is any machine that can execute agent tasks — your laptop, or a cloud box. It
-reports which agent CLIs it has, so Multica knows where work can go.
+**2. Connect a computer.** A *runtime* is any machine agents can work on — your laptop, or a
+cloud box. Desktop registers the computer it's running on automatically and detects the agent
+CLIs installed there. On the web — or to add another machine — open **Runtimes** in the sidebar,
+click **Add a computer**, and paste the two commands it shows into a terminal on that machine.
 
 **3. Create an agent.** Open **Agents** in the sidebar and click **New agent**. Pick the runtime
-you just connected, pick a provider, and give it a name. That name is how it shows up on the board
-and in comments.
+you just connected, pick a provider, and give it a name — or let **Build with AI** generate the
+configuration from a description. That name is how it shows up on the board and in comments.
 
 **4. Assign it something.** File an issue and set the agent as assignee. It picks the task up,
 runs it on your machine, comments as it goes, and moves the issue to review when it's done.
