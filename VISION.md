@@ -10,7 +10,7 @@
 
 **Make humans and AI agents work as one team.**
 
-[English | [简体中文](VISION.zh.md)]
+**English | [简体中文](VISION.zh.md)**
 
 </div>
 

@@ -11,7 +11,7 @@
 **智能体，也在看板上。**
 
 Multica 是一个开源的团队工作区。你像给同事派活一样，把任务交给 AI 编码智能体——它自己接手、边做边
-汇报、卡住了主动说，做完交回来给你审。可自部署，支持 20 个智能体 CLI，不绑定任何厂商。
+汇报、卡住了主动说，做完交回来给你审。可自部署，支持 20 种智能体 CLI，不绑定任何厂商。
 
 [![CI](https://github.com/multica-ai/multica/actions/workflows/ci.yml/badge.svg)](https://github.com/multica-ai/multica/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/multica-ai/multica?style=flat)](https://github.com/multica-ai/multica/releases)
@@ -49,8 +49,8 @@ diff，全都挂在同一个任务下——没人需要重新捋一遍上下文�
 
 *Claude Code、Codex、Cursor、Kimi——不用挑一个，全都招进来。*
 
-- **[20 个智能体 CLI](#运行时) →** Claude Code、Codex、Cursor、Copilot、Kimi、OpenCode 等等。
-- **[智能体也是队友](https://multica.ai/docs/agents) →** 起个名字、选个 provider、配台运行时，它就上了看板，跟其他同事没两样。
+- **[20 种智能体 CLI](#运行时) →** Claude Code、Codex、Cursor、Copilot、Kimi、OpenCode 等等。
+- **[智能体也是队友](https://multica.ai/docs/agents) →** 起个名字、选个提供方、配台运行时，它就上了看板，跟其他同事没两样。
 - **[小队](https://multica.ai/docs/squads) →** 人和智能体混编成队，leader 决定谁来接活。
 - **[Skills](https://multica.ai/docs/skills) →** 解决过一次的问题沉淀下来，全团队的智能体都能复用。
 - **[你自己的运行时](https://multica.ai/docs/daemon-runtimes) →** 它们的"工位"就是你的机器——守护进程跑在你的笔记本或云主机上，代码不出门。
@@ -76,7 +76,7 @@ diff，全都挂在同一个任务下——没人需要重新捋一遍上下文�
 
 ## 整套都归你
 
-*你的机器、你的 Git 服务、你的规矩——还有一份把智能体也算进去的操作记录。*
+*你的机器、你的 Git 服务、你的规矩——还有一份把智能体也算进去的审计记录。*
 
 - **[整套自部署](SELF_HOSTING.md) →** Docker Compose 或 Helm，装在你自己的基础设施上。
 - **[任意 Git 服务](https://multica.ai/docs/vcs-integration) →** GitHub、GitLab、Gitea、Forgejo，自建实例也行。
@@ -84,7 +84,7 @@ diff，全都挂在同一个任务下——没人需要重新捋一遍上下文�
 - **[角色](https://multica.ai/docs/members-roles)与[使用权限](https://multica.ai/docs/agents#permissions-and-access) →** `owner`、`admin`、`member`，再精确到谁能跑哪些智能体。
 - **[安全模型](https://multica.ai/docs/security-model) →** 智能体碰得到什么，碰不到什么。
 - **[Slack、飞书、钉钉](https://multica.ai/docs/channels) →** 在团队本来就在聊天的地方，触发和跟进智能体的工作。钉钉由社区维护。
-- **[Web、桌面端、移动端](https://multica.ai/docs/desktop-app) →** macOS、Windows、Linux 和 iPhone 上是同一个工作区——iOS 现在要自己从源码编译安装，还没上 App Store。
+- **[Web、桌面端、移动端](https://multica.ai/docs/desktop-app) →** macOS、Windows、Linux、iPhone，打开都是同一个工作区——iOS 现在要自己从源码编译安装，还没上 App Store。
 - **[CLI 与 API](https://multica.ai/docs/cli) →** 界面上能点的，CLI 和 API 里都能调。智能体操作 Multica，用的就是你那套 CLI。
 
 ---
@@ -127,9 +127,8 @@ Windows 上先设 `$env:MULTICA_MODE="with-server"`，再跑 PowerShell 安装�
 这一步是自动的：它会注册好这台电脑，顺便检测装了哪些智能体 CLI。用网页版、或者想再接一台机器，就
 打开侧边栏的**运行时**，点右上角的**添加电脑**，把弹窗里的两条命令粘到那台机器的终端里。
 
-**3. 创建智能体。** 打开侧边栏的**智能体**，点**新建智能体**。选中刚接入的运行时，选一个
-provider，起个名字——或者选**通过 AI 创建**，描述几句，配置自动生成。这个名字就是它之后在看板和
-评论里的身份。
+**3. 创建智能体。** 打开侧边栏的**智能体**，点**新建智能体**。选中刚接入的运行时，选一个提供方，
+起个名字——或者选**通过 AI 创建**，描述几句，配置自动生成。这个名字就是它之后在看板和评论里的身份。
 
 **4. 派给它一件事。** 建一个任务，负责人选成这个智能体。它会自己接手、在你的机器上跑、边做边评论，
 干完把任务挪到审核中。
@@ -140,8 +139,8 @@ provider，起个名字——或者选**通过 AI 创建**，描述几句，配�
 
 ## 运行时
 
-Multica 不自带模型。它驱动的是你本来就装好、登录好的那些智能体 CLI，所以换 provider 就是切个
-下拉框，谈不上迁移。
+Multica 不自带模型。它驱动的是你本来就装好、登录好的那些智能体 CLI，所以换提供方就是切个下拉框，
+谈不上迁移。
 
 <!-- runtimes:start -->
 
@@ -161,7 +160,7 @@ Multica 不自带模型。它驱动的是你本来就装好、登录好的那些
 <!-- runtimes:end -->
 
 怎么装、怎么登录：[安装智能体运行时](https://multica.ai/docs/install-agent-runtime) ·
-[Providers](https://multica.ai/docs/providers)
+[AI 编程工具对照](https://multica.ai/docs/providers)
 
 ---
 
@@ -170,14 +169,14 @@ Multica 不自带模型。它驱动的是你本来就装好、登录好的那些
 | 我想…… | 从这里看 |
 | --- | --- |
 | 今天就让智能体干点活 | [快速开始](https://multica.ai/docs/cloud-quickstart) · [上手教程](https://multica.ai/docs/tutorial) |
-| 搞清楚整套东西怎么转 | [核心概念](https://multica.ai/docs/concepts) · [Multica 如何工作](https://multica.ai/docs/how-multica-works) |
-| 创建和配置智能体 | [Agents](https://multica.ai/docs/agents) · [创建智能体](https://multica.ai/docs/agents-create) · [Skills](https://multica.ai/docs/skills) |
+| 搞清楚这套系统怎么运转 | [核心概念](https://multica.ai/docs/concepts) · [Multica 如何工作](https://multica.ai/docs/how-multica-works) |
+| 创建和配置智能体 | [智能体](https://multica.ai/docs/agents) · [创建智能体](https://multica.ai/docs/agents-create) · [Skills](https://multica.ai/docs/skills) |
 | 把活交到智能体手上 | [触发智能体](https://multica.ai/docs/triggering-agents) · [分配任务](https://multica.ai/docs/assigning-issues) · [提及](https://multica.ai/docs/mentioning-agents) |
 | 把我的机器接进来 | [守护进程与运行时](https://multica.ai/docs/daemon-runtimes) · [安装智能体运行时](https://multica.ai/docs/install-agent-runtime) |
 | 接上 Git 和聊天工具 | [GitHub](https://multica.ai/docs/github-integration) · [自建 Git](https://multica.ai/docs/vcs-integration) · [消息渠道](https://multica.ai/docs/channels) |
 | 部署在自己的基础设施上 | [自部署](SELF_HOSTING.md) · [安全模型](https://multica.ai/docs/security-model) · [环境变量](https://multica.ai/docs/environment-variables) |
 | 用脚本驱动它 | [CLI 参考](https://multica.ai/docs/cli) · [CLI 与守护进程指南](CLI_AND_DAEMON.md) · [认证令牌](https://multica.ai/docs/auth-tokens) |
-| 查智能体为什么卡住了 | [Tasks](https://multica.ai/docs/tasks) · [问题排查](https://multica.ai/docs/troubleshooting) |
+| 查智能体为什么卡住了 | [执行任务](https://multica.ai/docs/tasks) · [问题排查](https://multica.ai/docs/troubleshooting) |
 
 ---
 
@@ -193,13 +192,12 @@ Multica 不自带模型。它驱动的是你本来就装好、登录好的那些
    └──────────────┘   └──────┬───────┘   └──────────────────┘
                              │  通过 WebSocket 下发 task
                       ┌──────┴───────┐
-                      │  Agent 守护  │  跑在你的机器上，紧挨着你的代码
-                      │    进程      │
+                      │   守护进程   │  跑在你的机器上，紧挨着你的代码
                       └──────┬───────┘
                              │  拉起
                       ┌──────┴───────────────────────────────┐
                       │  Claude Code · Codex · Cursor · …    │
-                      │  （上面 20 个运行时里的任意一个）    │
+                      │  （上面 20 种运行时里的任意一种）    │
                       └──────────────────────────────────────┘
 ```
 
@@ -209,8 +207,8 @@ Multica 不自带模型。它驱动的是你本来就装好、登录好的那些
 | 桌面端 | Electron，复用 Web 的 UI 包 |
 | 移动端 | Expo / React Native (iOS) |
 | 后端 | Go (Chi router, sqlc, gorilla/websocket) |
-| 数据库 | PostgreSQL 17 with pgvector |
-| 智能体运行时 | 本地守护进程拉起上面 20 个智能体 CLI 中的任意一个 |
+| 数据库 | PostgreSQL 17 + pgvector |
+| 智能体运行时 | 本地守护进程拉起上面 20 种智能体 CLI 中的任意一个 |
 
 ---
 
@@ -224,8 +222,8 @@ Multica 不自带模型。它驱动的是你本来就装好、登录好的那些
 make dev
 ```
 
-`make dev` 会自己认出你在主目录还是 worktree 里，然后创建 env 文件、装依赖、初始化数据库、跑迁移，
-最后把所有服务拉起来。
+`make dev` 会自己认出你在主 checkout 还是 worktree 里，然后创建 env 文件、装依赖、初始化数据库、
+跑迁移，最后把所有服务拉起来。
 
 完整的开发流程、worktree 支持、测试和问题排查见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 iOS 客户端在 [`apps/mobile/`](apps/mobile/)，怎么编译装到自己 iPhone 上见它的
