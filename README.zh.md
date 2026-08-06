@@ -142,8 +142,6 @@ Windows 上先设 `$env:MULTICA_MODE="with-server"`，再跑 PowerShell 安装�
 Multica 不自带模型。它驱动的是你本来就装好、登录好的那些智能体 CLI，所以换提供方就是切个下拉框，
 谈不上迁移。
 
-<!-- runtimes:start -->
-
 | Provider | CLI | Provider | CLI |
 | --- | --- | --- | --- |
 | Claude Code | `claude` | OpenAI Codex | `codex` |
@@ -156,8 +154,6 @@ Multica 不自带模型。它驱动的是你本来就装好、登录好的那些
 | Qoder CLI | `qodercli` | Qoder CN | `qoderclicn` |
 | Qwen Code | `qwen` | QwenPaw | `qwenpaw` |
 | Reasonix | `reasonix` | Trae CLI | `traecli` |
-
-<!-- runtimes:end -->
 
 怎么装、怎么登录：[安装智能体运行时](https://multica.ai/docs/install-agent-runtime) ·
 [AI 编程工具对照](https://multica.ai/docs/providers)

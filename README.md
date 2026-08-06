@@ -149,8 +149,6 @@ Full walkthrough: [Quickstart](https://multica.ai/docs/cloud-quickstart) · [Tut
 Multica does not ship a model. It drives the agent CLIs you already have installed and
 authenticated, so switching providers is a dropdown, not a migration.
 
-<!-- runtimes:start -->
-
 | Provider | CLI | Provider | CLI |
 | --- | --- | --- | --- |
 | Claude Code | `claude` | OpenAI Codex | `codex` |
@@ -163,8 +161,6 @@ authenticated, so switching providers is a dropdown, not a migration.
 | Qoder CLI | `qodercli` | Qoder CN | `qoderclicn` |
 | Qwen Code | `qwen` | QwenPaw | `qwenpaw` |
 | Reasonix | `reasonix` | Trae CLI | `traecli` |
-
-<!-- runtimes:end -->
 
 Installing and authenticating them: [Install an agent runtime](https://multica.ai/docs/install-agent-runtime) ·
 [Providers](https://multica.ai/docs/providers)
