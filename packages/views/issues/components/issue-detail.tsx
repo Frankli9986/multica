@@ -2801,7 +2801,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
           <div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-<h2 className="text-title-sm font-semibold">{t(($) => $.detail.activity_section)}</h2>
+                <h2 className="text-title-sm font-semibold">{t(($) => $.detail.activity_section)}</h2>
                 <TimelineSortToggle t={t} />
               </div>
               <div className="flex items-center gap-2">
