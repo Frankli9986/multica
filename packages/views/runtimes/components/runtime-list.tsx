@@ -29,6 +29,7 @@ import { agentTaskSnapshotOptions } from "@multica/core/agents";
 import {
   deriveRuntimeHealth,
   isPiRuntimeModelConfigured,
+  runtimeModelsOptions,
   runtimeProfileListOptions,
   runtimeSupportsDefaultModelConnection,
   runtimeUsageOptions,
@@ -305,6 +306,15 @@ function HealthCell({
   const { t: tAgents } = useT("agents");
   const labelOf = useHealthLabel();
   const timeAgo = useTimeAgo();
+  const health = deriveRuntimeHealth(runtime, now);
+  const shouldCheckPiLocalModels =
+    health === "online" &&
+    runtime.provider === "pi" &&
+    runtimeSupportsDefaultModelConnection(runtime) &&
+    !isPiRuntimeModelConfigured(runtime);
+  const piModelsQuery = useQuery(
+    runtimeModelsOptions(shouldCheckPiLocalModels ? runtime.id : null),
+  );
   const managedSetupPhase = managedRuntimeSetupPhase(runtime);
   if (managedSetupPhase) {
     return (
@@ -376,16 +386,16 @@ function HealthCell({
     );
   }
 
-  const health = deriveRuntimeHealth(runtime, now);
   const offline = health === "offline" || health === "about_to_gc";
   const lastSeen = runtime.last_seen_at ? timeAgo(runtime.last_seen_at) : null;
   const active = workload.runningCount + workload.queuedCount;
+  const piModelDiscoveryComplete = piModelsQuery.isSuccess;
+  const piHasLocalModels = (piModelsQuery.data?.models.length ?? 0) > 0;
 
   if (
-    health === "online" &&
-    runtime.provider === "pi" &&
-    runtimeSupportsDefaultModelConnection(runtime) &&
-    !isPiRuntimeModelConfigured(runtime)
+    shouldCheckPiLocalModels &&
+    piModelDiscoveryComplete &&
+    !piHasLocalModels
   ) {
     return (
       <ListGridCell className="gap-1.5">

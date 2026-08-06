@@ -231,6 +231,8 @@
     "model_custom_use": "Use \"{{value}}\"",
     "model_clear": "Clear (use provider default)",
     "model_clear_title": "Clear and fall back to the runtime's provider default",
+    "model_clear_runtime_default": "Clear (use runtime default)",
+    "model_clear_runtime_default_title": "Clear the override and use the runtime default model",
     "thinking_default": "Follow CLI config",
     "thinking_tooltip": "Thinking · {{value}}",
     "thinking_clear": "Follow CLI config",
@@ -248,7 +250,12 @@
     "managed_by_runtime_title": "Model selection is managed by this runtime.",
     "managed_by_runtime_hint": "Configure the model on the runtime host (e.g. Hermes reads it from its own config file).",
     "discovery_failed": "discovery failed",
-    "clear_full": "Clear selection (use provider default)"
+    "runtime_default_value": "Runtime default: {{model}}",
+    "runtime_default_option": "Use runtime default",
+    "runtime_default_subtitle": "{{provider}} · inherited from {{runtime}}",
+    "runtime_default_subtitle_no_provider": "Inherited from {{runtime}}",
+    "clear_full": "Clear selection (use provider default)",
+    "clear_runtime_default": "Clear selection (use runtime default)"
   },
   "tabs": {
     "overview": "Overview",

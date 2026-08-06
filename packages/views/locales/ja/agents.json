@@ -214,6 +214,8 @@
     "model_custom_use": "\"{{value}}\" を使用",
     "model_clear": "クリア（プロバイダーのデフォルトを使用）",
     "model_clear_title": "選択をクリアし、ランタイムのプロバイダーのデフォルトに戻します",
+    "model_clear_runtime_default": "クリア（ランタイムのデフォルトを使用）",
+    "model_clear_runtime_default_title": "上書きをクリアし、ランタイムのデフォルトモデルを使用します",
     "thinking_default": "CLI 設定に従う",
     "thinking_tooltip": "思考 · {{value}}",
     "thinking_clear": "CLI 設定に従う",
@@ -231,7 +233,12 @@
     "managed_by_runtime_title": "このランタイムがモデル選択を管理します。",
     "managed_by_runtime_hint": "ランタイムホストでモデルを設定してください（例: Hermes は自身の設定ファイルから読み込みます）。",
     "discovery_failed": "検出に失敗しました",
-    "clear_full": "選択をクリア（プロバイダーのデフォルトを使用）"
+    "runtime_default_value": "ランタイムのデフォルト: {{model}}",
+    "runtime_default_option": "ランタイムのデフォルトを使用",
+    "runtime_default_subtitle": "{{provider}} · {{runtime}} から継承",
+    "runtime_default_subtitle_no_provider": "{{runtime}} から継承",
+    "clear_full": "選択をクリア（プロバイダーのデフォルトを使用）",
+    "clear_runtime_default": "選択をクリア（ランタイムのデフォルトを使用）"
   },
   "tabs": {
     "overview": "概要",

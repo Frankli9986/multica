@@ -222,6 +222,8 @@
     "model_custom_use": "使用\"{{value}}\"",
     "model_clear": "清除（使用提供方默认）",
     "model_clear_title": "清除并回退到运行时的提供方默认",
+    "model_clear_runtime_default": "清除（使用运行时默认）",
+    "model_clear_runtime_default_title": "清除覆盖并使用运行时默认模型",
     "thinking_default": "跟随 CLI 配置",
     "thinking_tooltip": "思考 · {{value}}",
     "thinking_clear": "跟随 CLI 配置",
@@ -239,7 +241,12 @@
     "managed_by_runtime_title": "模型选择由该运行时管理。",
     "managed_by_runtime_hint": "请在运行时主机上配置模型（例如 Hermes 会从自身配置文件读取）。",
     "discovery_failed": "发现失败",
-    "clear_full": "清除选择（使用提供方默认）"
+    "runtime_default_value": "运行时默认：{{model}}",
+    "runtime_default_option": "使用运行时默认",
+    "runtime_default_subtitle": "{{provider}} · 继承自 {{runtime}}",
+    "runtime_default_subtitle_no_provider": "继承自 {{runtime}}",
+    "clear_full": "清除选择（使用提供方默认）",
+    "clear_runtime_default": "清除选择（使用运行时默认）"
   },
   "tabs": {
     "overview": "概览",

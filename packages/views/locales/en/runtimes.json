@@ -144,8 +144,15 @@
       "cancel": "Cancel",
       "save": "Save connection",
       "saving": "Saving...",
+      "remove": "Remove connection",
+      "delete_title": "Remove Pi model connection?",
+      "delete_description": "This clears the saved default model and API key. Agents without their own model setting will fall back to Pi's local configuration.",
+      "delete_confirm": "Remove model connection",
+      "deleting": "Removing...",
       "toast_saved": "Pi model connected",
-      "toast_failed": "Failed to connect the model"
+      "toast_failed": "Failed to connect the model",
+      "toast_deleted": "Pi model connection removed",
+      "toast_delete_failed": "Failed to remove the model connection"
     },
     "diagnostics_title": "Diagnostics",
     "diagnostics_cli": "CLI",

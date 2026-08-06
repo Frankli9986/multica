@@ -12,11 +12,16 @@ const TEST_RESOURCES = {
   en: { common: enCommon, runtimes: enRuntimes },
 };
 
-const mutate = vi.hoisted(() => vi.fn());
+const updateMutate = vi.hoisted(() => vi.fn());
+const deleteMutate = vi.hoisted(() => vi.fn());
 
 vi.mock("@multica/core/runtimes/mutations", () => ({
   useUpdateRuntimeModelConnection: () => ({
-    mutate,
+    mutate: updateMutate,
+    isPending: false,
+  }),
+  useDeleteRuntimeModelConnection: () => ({
+    mutate: deleteMutate,
     isPending: false,
   }),
 }));
@@ -45,6 +50,17 @@ const runtime: AgentRuntime = {
   last_seen_at: "2026-08-04T00:00:00Z",
   created_at: "2026-08-04T00:00:00Z",
   updated_at: "2026-08-04T00:00:00Z",
+};
+
+const configuredRuntime: AgentRuntime = {
+  ...runtime,
+  default_model_config: {
+    provider: "deepseek",
+    api: "openai-completions",
+    base_url: "https://api.deepseek.com",
+    model: "deepseek-v4-pro",
+  },
+  has_default_model_api_key: true,
 };
 
 function renderCard(value: AgentRuntime = runtime) {
@@ -87,7 +103,7 @@ describe("PiModelConnectionCard", () => {
       screen.getByRole("button", { name: "Save connection" }),
     );
 
-    expect(mutate).toHaveBeenCalledWith(
+    expect(updateMutate).toHaveBeenCalledWith(
       {
         runtimeId: "runtime-1",
         connection: {
@@ -103,19 +119,40 @@ describe("PiModelConnectionCard", () => {
   });
 
   it("shows the configured model without exposing a key", () => {
-    renderCard({
-      ...runtime,
-      default_model_config: {
-        provider: "deepseek",
-        api: "openai-completions",
-        base_url: "https://api.deepseek.com",
-        model: "deepseek-v4-pro",
-      },
-      has_default_model_api_key: true,
-    });
+    renderCard(configuredRuntime);
 
     expect(screen.getByText("Ready")).toBeInTheDocument();
     expect(screen.getByText("deepseek-v4-pro")).toBeInTheDocument();
     expect(screen.queryByText(/sk-/)).not.toBeInTheDocument();
+  });
+
+  it("removes a configured model connection after confirmation", async () => {
+    const user = userEvent.setup();
+    renderCard(configuredRuntime);
+
+    await user.click(
+      screen.getByRole("button", { name: "Edit connection" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Remove connection" }),
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Remove Pi model connection?",
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Remove model connection" }),
+    );
+
+    expect(deleteMutate).toHaveBeenCalledWith(
+      "runtime-1",
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
   });
 });

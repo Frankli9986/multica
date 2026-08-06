@@ -139,8 +139,15 @@
       "cancel": "취소",
       "save": "연결 저장",
       "saving": "저장하는 중...",
+      "remove": "연결 제거",
+      "delete_title": "Pi 모델 연결을 제거할까요?",
+      "delete_description": "저장된 기본 모델과 API 키를 지웁니다. 자체 모델 설정이 없는 에이전트는 Pi의 로컬 설정으로 돌아갑니다.",
+      "delete_confirm": "모델 연결 제거",
+      "deleting": "제거하는 중...",
       "toast_saved": "Pi 모델을 연결했습니다",
-      "toast_failed": "모델을 연결하지 못했습니다"
+      "toast_failed": "모델을 연결하지 못했습니다",
+      "toast_deleted": "Pi 모델 연결을 제거했습니다",
+      "toast_delete_failed": "모델 연결을 제거하지 못했습니다"
     },
     "diagnostics_title": "진단",
     "diagnostics_cli": "CLI",

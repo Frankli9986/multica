@@ -222,6 +222,8 @@
     "model_custom_use": "\"{{value}}\" 사용",
     "model_clear": "지우기(제공자 기본값 사용)",
     "model_clear_title": "선택을 지우고 런타임 제공자의 기본값으로 돌아갑니다",
+    "model_clear_runtime_default": "지우기(런타임 기본값 사용)",
+    "model_clear_runtime_default_title": "재정의를 지우고 런타임 기본 모델을 사용합니다",
     "thinking_default": "CLI 설정 따르기",
     "thinking_tooltip": "추론 · {{value}}",
     "thinking_clear": "CLI 설정 따르기",
@@ -239,7 +241,12 @@
     "managed_by_runtime_title": "이 런타임에서 모델 선택을 관리합니다.",
     "managed_by_runtime_hint": "런타임 호스트에서 모델을 설정하세요. 예: Hermes는 자체 설정 파일에서 읽습니다.",
     "discovery_failed": "검색 실패",
-    "clear_full": "선택 지우기(제공자 기본값 사용)"
+    "runtime_default_value": "런타임 기본값: {{model}}",
+    "runtime_default_option": "런타임 기본값 사용",
+    "runtime_default_subtitle": "{{provider}} · {{runtime}}에서 상속",
+    "runtime_default_subtitle_no_provider": "{{runtime}}에서 상속",
+    "clear_full": "선택 지우기(제공자 기본값 사용)",
+    "clear_runtime_default": "선택 지우기(런타임 기본값 사용)"
   },
   "tabs": {
     "overview": "개요",

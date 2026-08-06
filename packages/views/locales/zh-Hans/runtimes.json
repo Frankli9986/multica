@@ -139,8 +139,15 @@
       "cancel": "取消",
       "save": "保存连接",
       "saving": "保存中...",
+      "remove": "删除连接",
+      "delete_title": "删除 Pi 模型连接？",
+      "delete_description": "这会清除保存的默认模型和 API Key。没有单独设置模型的智能体会回退到 Pi 的本地配置。",
+      "delete_confirm": "删除模型连接",
+      "deleting": "删除中...",
       "toast_saved": "Pi 模型已连接",
-      "toast_failed": "连接模型失败"
+      "toast_failed": "连接模型失败",
+      "toast_deleted": "Pi 模型连接已删除",
+      "toast_delete_failed": "删除模型连接失败"
     },
     "diagnostics_title": "诊断",
     "diagnostics_cli": "CLI",
