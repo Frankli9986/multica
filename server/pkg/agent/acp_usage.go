@@ -22,6 +22,7 @@ const (
 // whether a runtime explicitly reported zero or omitted the bucket entirely.
 type acpUsageSnapshot struct {
 	TokenUsage
+	rawInputTokens  int64
 	fields          acpUsageFields
 	totalTokens     int64
 	hasTotalTokens  bool
@@ -116,8 +117,9 @@ func (a *acpUsageAccumulator) resolveInput() {
 func (s acpUsageSnapshot) withFallback(fallback acpUsageSnapshot) acpUsageSnapshot {
 	result := s
 	inputFromFallback := false
-	if fallback.has(acpUsageInput) && (!result.has(acpUsageInput) || result.InputTokens == 0) {
+	if fallback.has(acpUsageInput) && (!result.has(acpUsageInput) || result.rawInputTokens == 0) {
 		result.InputTokens = fallback.InputTokens
+		result.rawInputTokens = fallback.rawInputTokens
 		result.inputNormalized = fallback.inputNormalized
 		inputFromFallback = true
 	}
@@ -142,7 +144,20 @@ func (s acpUsageSnapshot) withFallback(fallback acpUsageSnapshot) acpUsageSnapsh
 		result.totalTokens = fallback.totalTokens
 		result.hasTotalTokens = true
 	}
+	result.normalizeInput()
 	return result
+}
+
+// normalizeInput always starts from the provider's raw input count so a
+// preferred/fallback merge can be normalized after all complementary fields
+// are present without subtracting cached reads twice.
+func (s *acpUsageSnapshot) normalizeInput() {
+	s.InputTokens = s.rawInputTokens
+	s.inputNormalized = false
+	if !s.has(acpUsageInput) || !s.has(acpUsageOutput) || !s.has(acpUsageCacheRead) {
+		return
+	}
+	s.TokenUsage, s.inputNormalized = normalizeACPTokenUsage(s.TokenUsage, s.totalTokens)
 }
 
 func parseACPTokenUsage(data json.RawMessage) TokenUsage {
@@ -161,6 +176,7 @@ func parseACPTokenUsageSnapshot(data json.RawMessage) acpUsageSnapshot {
 	var snapshot acpUsageSnapshot
 	if value, ok := acpUsageInt64(rawFields, "inputTokens", "input_tokens"); ok {
 		snapshot.InputTokens = value
+		snapshot.rawInputTokens = value
 		snapshot.fields |= acpUsageInput
 	}
 	if value, ok := acpUsageInt64(rawFields, "outputTokens", "output_tokens"); ok {
@@ -195,12 +211,7 @@ func parseACPTokenUsageSnapshot(data json.RawMessage) acpUsageSnapshot {
 		snapshot.hasTotalTokens = true
 	}
 
-	if snapshot.has(acpUsageInput) && snapshot.has(acpUsageOutput) && snapshot.has(acpUsageCacheRead) {
-		snapshot.TokenUsage, snapshot.inputNormalized = normalizeACPTokenUsage(
-			snapshot.TokenUsage,
-			snapshot.totalTokens,
-		)
-	}
+	snapshot.normalizeInput()
 	return snapshot
 }
 

@@ -144,6 +144,67 @@ func TestACPPromptUsageFillsPartialTopLevelFromMeta(t *testing.T) {
 	}
 }
 
+func TestACPPromptUsageNormalizesComplementaryRepresentations(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want TokenUsage
+	}{
+		{
+			name: "top-level tokens and nested meta cache",
+			raw: `{
+				"stopReason":"end_turn",
+				"usage":{"inputTokens":120,"outputTokens":30},
+				"_meta":{"usage":{"cacheReadTokens":20,"totalTokens":150}}
+			}`,
+			want: TokenUsage{InputTokens: 100, OutputTokens: 30, CacheReadTokens: 20},
+		},
+		{
+			name: "nested meta tokens and flat meta cache",
+			raw: `{
+				"stopReason":"end_turn",
+				"_meta":{
+					"usage":{"inputTokens":120,"outputTokens":30},
+					"cacheReadTokens":20,
+					"totalTokens":150
+				}
+			}`,
+			want: TokenUsage{InputTokens: 100, OutputTokens: 30, CacheReadTokens: 20},
+		},
+		{
+			name: "already normalized input is not subtracted twice",
+			raw: `{
+				"stopReason":"end_turn",
+				"usage":{"inputTokens":120,"outputTokens":30,"cacheReadTokens":20,"totalTokens":150},
+				"_meta":{"usage":{"cacheWriteTokens":5,"costUsdTicks":900}}
+			}`,
+			want: TokenUsage{InputTokens: 100, OutputTokens: 30, CacheReadTokens: 20, CacheWriteTokens: 5, CostUSDTicks: 900},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var got hermesPromptResult
+			client := &hermesClient{
+				pending: make(map[int]*pendingRPC),
+				onPromptDone: func(result hermesPromptResult) {
+					got = result
+				},
+			}
+			client.extractPromptResult(json.RawMessage(test.raw))
+
+			if got.usage.TokenUsage != test.want {
+				t.Fatalf("usage = %+v, want %+v", got.usage.TokenUsage, test.want)
+			}
+		})
+	}
+}
+
 func TestACPUsagePresentWithProviderCostOnly(t *testing.T) {
 	t.Parallel()
 
