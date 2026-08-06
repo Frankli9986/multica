@@ -58,6 +58,7 @@ import {
 } from "react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import type { Issue, TimelineEntry } from "@multica/core/types";
 import type { TimelineSortDirection } from "@multica/core/issues/timeline-sort";
 import { Text } from "@/components/ui/text";
@@ -76,6 +77,10 @@ import {
   shouldMarkViewedOnUnmount,
   type DividerRect,
 } from "@/lib/edge-geometry";
+import { ImageSequenceProvider } from "@/lib/markdown/image-sequence";
+import { issueAttachmentsOptions } from "@/data/queries/issues";
+import { useWorkspaceStore } from "@/data/workspace-store";
+import type { ImageSequenceBlock } from "@multica/core/attachments/image-sequence";
 import { useColorScheme } from "@/lib/use-color-scheme";
 import { THEME } from "@/lib/theme";
 import { useCommentSelectStore } from "@/data/comment-select-store";
@@ -211,6 +216,33 @@ export function TimelineList({
     if (!entries) return [];
     return buildTimelineRows(coalesceTimeline(entries), direction);
   }, [entries, direction]);
+
+  // Every image on this screen, in render order: the description first, then
+  // each comment row with its replies (MUL-5752). Tapping any of them opens
+  // the lightbox at its real position so a swipe walks to the next.
+  //
+  // The description's attachments come from the same query IssueDescription
+  // uses — TanStack Query dedupes it, so this adds no request.
+  const wsId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const { data: issueAttachments } = useQuery(
+    issueAttachmentsOptions(wsId, issue.id),
+  );
+  const imageBlocks = useMemo<ImageSequenceBlock[]>(() => {
+    const blocks: ImageSequenceBlock[] = [
+      { content: issue.description, attachments: issueAttachments },
+    ];
+    for (const row of data) {
+      if (row.entry.type !== "comment") continue;
+      blocks.push({
+        content: row.entry.content,
+        attachments: row.entry.attachments,
+      });
+      for (const reply of row.replies) {
+        blocks.push({ content: reply.content, attachments: reply.attachments });
+      }
+    }
+    return blocks;
+  }, [issue.description, issueAttachments, data]);
 
   const listRef = useRef<FlashListRef<TimelineRow>>(null);
   // Native scroll node captured from the FlashList so marker Views can be
@@ -635,6 +667,7 @@ export function TimelineList({
   }
 
   return (
+    <ImageSequenceProvider blocks={imageBlocks}>
     <View className="flex-1">
       <Pressable
         onPress={
@@ -714,6 +747,7 @@ export function TimelineList({
         />
       ) : null}
     </View>
+    </ImageSequenceProvider>
   );
 }
 
