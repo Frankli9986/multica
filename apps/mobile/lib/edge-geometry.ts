@@ -85,3 +85,53 @@ export function isDividerPast(
 ): boolean {
   return rect.y + rect.height <= metrics.offsetY;
 }
+
+/**
+ * Pure, testable crossing computation used by the timeline list at scroll
+ * time. Given the measured content-y rects of every outstanding marker and
+ * the current scroll metrics, return the set of marker keys whose divider
+ * has scrolled above the viewport top (per {@link isDividerPast}).
+ *
+ * Markers without a rect (the parent ref wasn't ready at measurement time)
+ * are left uncrossed — callers re-measure on the next frame rather than
+ * treating a missing rect as `y: 0` (which would false-positive on the
+ * first layout). This is the runtime wiring for `isDividerPast`; the
+ * direction is forwarded for symmetry but does not change the result.
+ */
+export function computeCrossedMarkers(
+  rects: ReadonlyMap<string, DividerRect>,
+  metrics: ScrollMetrics,
+  direction: TimelineSortDirection,
+): Set<string> {
+  const crossed = new Set<string>();
+  for (const [key, rect] of rects) {
+    if (isDividerPast(rect, metrics, direction)) crossed.add(key);
+  }
+  return crossed;
+}
+
+/**
+ * Should leaving the issue screen bump `last_viewed_at` to now?
+ *
+ * Pure decision so the unmount cleanup can be unit-tested without RN. The
+ * caller reads LIVE refs (not a first-render closure) for `hasDividers` and
+ * `unseenMarkerCount`. Mark viewed only when:
+ *   - there were no unread dividers at all (nothing to catch up on), OR
+ *   - every marker was crossed (the user read past every boundary), OR
+ *   - the user actively reached the newest edge.
+ *
+ * Crucially, on a cold load where the timeline is still empty at first
+ * render and the user leaves without scrolling, the LIVE `hasDividers` is
+ * true once data arrives (and `userReachedEdge` stays false), so this
+ * returns false and the snapshot is preserved for the next visit. Reading a
+ * stale first-render closure here would false-positive markViewed.
+ */
+export function shouldMarkViewedOnUnmount(args: {
+  hasDividers: boolean;
+  unseenMarkerCount: number;
+  userReachedEdge: boolean;
+}): boolean {
+  return (
+    !args.hasDividers || args.unseenMarkerCount === 0 || args.userReachedEdge
+  );
+}

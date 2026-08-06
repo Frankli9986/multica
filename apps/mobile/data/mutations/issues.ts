@@ -5,8 +5,9 @@
  *
  * Optimistic strategy:
  *   - Cancel timeline refetches.
- *   - Append a synthetic `optimistic-<ts>` TimelineEntry at the end
- *     (newest position in an ASC list).
+ *   - Append a synthetic `optimistic-<createSafeId()>` TimelineEntry at the
+ *     end (newest position in an ASC list). The suffix is cryptographically
+ *     random so same-millisecond concurrent submits never collide.
  *   - On error: do NOT roll back — keep the optimistic row so the inline
  *     "Failed · Retry · Discard" affordance has something to render.
  *   - On success (server returns the full Comment): do the ONE-TO-ONE
@@ -31,6 +32,7 @@ import type {
   TimelineEntry,
   UpdateIssueRequest,
 } from "@multica/core/types";
+import { createSafeId } from "@multica/core/utils";
 import { api } from "@/data/api";
 import { issueKeys } from "@/data/queries/issues";
 import { inboxKeys } from "@/data/queries/inbox";
@@ -85,7 +87,11 @@ export function useCreateComment(issueId: string) {
       if (!userId) return { prev, key, optimisticId: null };
 
       const now = new Date().toISOString();
-      const optimisticId = `optimistic-${Date.now()}`;
+      // Cryptographically-random suffix so two submits fired in the same
+      // millisecond (identical content, same parent) still get distinct
+      // optimistic ids. Date.now() alone collides under same-ms concurrency,
+      // which would make onSuccess's one-to-one replacement ambiguous.
+      const optimisticId = `optimistic-${createSafeId()}`;
       const optimistic: TimelineEntry = {
         type: "comment",
         id: optimisticId,

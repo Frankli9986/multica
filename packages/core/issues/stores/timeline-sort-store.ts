@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { defaultStorage } from "../../platform/storage";
 import type { TimelineSortDirection } from "../timeline-sort";
 
 /**
@@ -30,7 +31,11 @@ export const useTimelineSortStore = create<TimelineSortStore>()(
     }),
     {
       name: "multica_timeline_sort",
-      storage: createJSONStorage(() => localStorage),
+      // packages/core must not touch `localStorage` directly (SSR + platform
+      // boundary); go through the SSR-safe StorageAdapter used by every other
+      // core persisted store. It wraps localStorage on web/electron and is a
+      // no-op on the server.
+      storage: createJSONStorage(() => defaultStorage),
       // Defend against corrupted/unknown stored values: only accept the two
       // known directions, otherwise fall back to "oldest".
       merge: (persisted, current) => {

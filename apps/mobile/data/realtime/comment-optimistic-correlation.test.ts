@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
+import { createSafeId } from "@multica/core/utils";
 import type { Comment, TimelineEntry } from "@multica/core/types";
 
 // issue-ws-updaters imports issueKeys from data/queries/issue-keys, which
@@ -109,6 +110,46 @@ describe("replaceOptimisticWithReal (mutation onSuccess canonical replacement)",
       commentToTimelineEntry(realComment("cmt-B", "2026-01-01T00:00:01Z", "same text")),
     );
     expect(afterB?.map((e) => e.id)).toEqual(["cmt-A", "cmt-B"]);
+  });
+
+  it("same-millisecond concurrent submits get distinct optimistic ids (no Date.now collision)", () => {
+    // Regression: the optimistic id used to be `optimistic-${Date.now()}`.
+    // Two submits fired in the same millisecond (identical content/parent)
+    // produced the same optimistic id, making onSuccess's one-to-one
+    // replacement ambiguous. The mutation now suffixes createSafeId() which
+    // is cryptographically random, so even same-ms ids never collide.
+    const ids = Array.from({ length: 50 }, () => `optimistic-${createSafeId()}`);
+    const unique = new Set(ids);
+    expect(unique.size).toBe(ids.length);
+
+    // Two such ids coexist in the cache and are replaced independently when
+    // their own server response lands.
+    const idA = `optimistic-${createSafeId()}`;
+    const idB = `optimistic-${createSafeId()}`;
+    expect(idA).not.toBe(idB);
+    const old = [
+      optEntry("root", "2025-01-01T00:00:00Z"),
+      optEntry(idA, "2026-01-01T00:00:00Z", "same text"),
+      optEntry(idB, "2026-01-01T00:00:00Z", "same text"),
+    ];
+
+    const afterA = replaceOptimisticWithReal(
+      old,
+      idA,
+      commentToTimelineEntry(
+        realComment("cmt-A", "2026-01-01T00:00:00Z", "same text"),
+      ),
+    );
+    expect(afterA?.map((e) => e.id)).toEqual(["root", "cmt-A", idB]);
+
+    const afterB = replaceOptimisticWithReal(
+      afterA!,
+      idB,
+      commentToTimelineEntry(
+        realComment("cmt-B", "2026-01-01T00:00:00Z", "same text"),
+      ),
+    );
+    expect(afterB?.map((e) => e.id)).toEqual(["root", "cmt-A", "cmt-B"]);
   });
 });
 

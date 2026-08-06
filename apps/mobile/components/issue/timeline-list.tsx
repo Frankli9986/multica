@@ -40,7 +40,14 @@
  *
  * List engine: FlashList v2 (Shopify).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ElementRef,
+} from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -48,7 +55,6 @@ import {
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  type ViewToken,
 } from "react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
@@ -64,7 +70,12 @@ import { CommentCard } from "./comment-card";
 import { useLastViewedStore } from "@/data/stores/last-viewed-store";
 import { coalesceTimeline } from "@/lib/timeline-coalesce";
 import { buildTimelineRows, type TimelineRow } from "@/lib/timeline-thread";
-import { computeAtNewestEdge } from "@/lib/edge-geometry";
+import {
+  computeAtNewestEdge,
+  computeCrossedMarkers,
+  shouldMarkViewedOnUnmount,
+  type DividerRect,
+} from "@/lib/edge-geometry";
 import { useColorScheme } from "@/lib/use-color-scheme";
 import { THEME } from "@/lib/theme";
 import { useCommentSelectStore } from "@/data/comment-select-store";
@@ -202,6 +213,29 @@ export function TimelineList({
   }, [entries, direction]);
 
   const listRef = useRef<FlashListRef<TimelineRow>>(null);
+  // Native scroll node captured from the FlashList so marker Views can be
+  // measured against the scroll-view's content-y coordinate space.
+  const scrollRef = useRef<ElementRef<typeof View> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const tryCapture = () => {
+      if (cancelled) return;
+      const node = listRef.current?.getNativeScrollRef?.() as
+        | ElementRef<typeof View>
+        | null;
+      if (node) {
+        scrollRef.current = node;
+        return;
+      }
+      // Not attached yet (FlashList still mounting) — retry next frame.
+      requestAnimationFrame(tryCapture);
+    };
+    const raf = requestAnimationFrame(tryCapture);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, []);
   const lastStampRef = useRef<string | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
@@ -247,6 +281,103 @@ export function TimelineList({
     crossedMarkersRef.current.add(key);
     unseenMarkersRef.current.delete(key);
   }, []);
+
+  // ── Runtime divider-rect measurement ──────────────────────────────────
+  // Crossing is decided by ACTUAL PIXEL GEOMETRY (isDividerPast /
+  // computeCrossedMarkers), not by visible row index. Each rendered divider
+  // registers its native View ref here (the top-level sentinel row and each
+  // in-thread divider). On scroll/frame we measure each marker and feed its
+  // content-y rect to computeCrossedMarkers.
+  //
+  // We use absolute PAGE coordinates via `measure()` rather than
+  // measureLayout(relativeTo: scrollNode): on iOS a ScrollView's content
+  // view is translated by contentOffset, so measureLayout relative to the
+  // scroll node returns VIEWPORT-relative y (which moves with the scroll)
+  // rather than content-y. Absolute pageY is stable under scroll, so:
+  //   contentY = markerPageY - scrollPageY + offsetY
+  // (scrollPageY is the on-screen top of the scroll viewport, which does
+  // not move during scroll). Then isDividerPast's
+  // `contentY + height <= offsetY` correctly tests "divider bottom above
+  // the viewport top" and is direction-symmetric.
+  //
+  // A marker whose ref isn't mounted/laid out yet is omitted; we re-measure
+  // on the next frame/scroll. We never treat a missing rect as y:0 (that
+  // would false-positive on the first layout before the ref is attached).
+  const markerRefs = useRef(new Map<string, View>());
+  const registerMarkerRef = useCallback(
+    (key: string, ref: View | null) => {
+      if (ref) markerRefs.current.set(key, ref);
+      else markerRefs.current.delete(key);
+    },
+    [],
+  );
+  // Latest scroll metrics so newly-mounted markers can be measured against
+  // the current position without waiting for the next scroll event.
+  const latestMetricsRef = useRef({ offsetY: 0, contentH: 0, viewportH: 0 });
+  // Cached on-screen pageY of the scroll viewport (stable during scroll).
+  const scrollPageYRef = useRef<number | null>(null);
+
+  const measureAndCrossMarkers = useCallback(() => {
+    if (unseenMarkersRef.current.size === 0) return;
+    const scrollNode = scrollRef.current;
+    if (!scrollNode) {
+      // FlashList native scroll ref not attached yet — retry next frame so
+      // crossing still fires without another scroll.
+      requestAnimationFrame(() => measureAndCrossMarkers());
+      return;
+    }
+    // Ensure we know the scroll viewport's pageY before measuring markers.
+    if (scrollPageYRef.current === null) {
+      scrollNode.measure(
+        (_x, _y, _w, _h, _pageX, pageY) => {
+          if (pageY == null || Number.isNaN(pageY)) return;
+          scrollPageYRef.current = pageY;
+          measureAndCrossMarkers();
+        },
+      );
+      return;
+    }
+    const scrollPageY = scrollPageYRef.current;
+    // Snapshot metrics NOW; measure() callbacks resolve asynchronously and
+    // must judge against the position at measurement time, not a later scroll.
+    const metrics = latestMetricsRef.current;
+    let pending = 0;
+    for (const key of unseenMarkersRef.current) {
+      const markerView = markerRefs.current.get(key);
+      if (!markerView) {
+        pending += 1;
+        continue;
+      }
+      // The crossing decision runs INSIDE the async callback because the
+      // rect isn't available synchronously. We pass a one-entry map so the
+      // runtime stays wired to the exact helper under test rather than
+      // re-deriving the formula inline.
+      markerView.measure((_x, _y, _w, h, _pageX, pageY) => {
+        // The marker may have been crossed/removed by another path (e.g.
+        // reaching the edge) between scheduling and this callback.
+        if (!unseenMarkersRef.current.has(key)) return;
+        if (pageY == null || Number.isNaN(pageY) || h == null) return;
+        const contentY = pageY - scrollPageY + metrics.offsetY;
+        const rects = new Map<string, DividerRect>([
+          [key, { y: contentY, height: h }],
+        ]);
+        const crossed = computeCrossedMarkers(rects, metrics, direction);
+        if (crossed.has(key)) markCrossed(key);
+      });
+    }
+    // If any marker ref wasn't mounted yet, re-measure next frame so crossing
+    // still fires without another scroll event.
+    if (pending > 0) {
+      requestAnimationFrame(() => measureAndCrossMarkers());
+    }
+  }, [direction, markCrossed]);
+
+  // When the marker set changes (new unread content arrives), measure once
+  // against the current position — the divider may already be scrolled past.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => measureAndCrossMarkers());
+    return () => cancelAnimationFrame(raf);
+  }, [measureAndCrossMarkers, dividerPlan]);
 
   // ── Highlight timer: start when target row MOUNTS, not when data
   //    arrives. Keyed by (commentId, nonce) so recycle/remount of the
@@ -326,15 +457,14 @@ export function TimelineList({
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      const metrics = {
+        offsetY: contentOffset.y,
+        contentH: contentSize.height,
+        viewportH: layoutMeasurement.height,
+      };
+      latestMetricsRef.current = metrics;
       const wasAtEdge = atNewestEdgeRef.current;
-      const atEdge = computeAtNewestEdge(
-        {
-          offsetY: contentOffset.y,
-          contentH: contentSize.height,
-          viewportH: layoutMeasurement.height,
-        },
-        direction,
-      );
+      const atEdge = computeAtNewestEdge(metrics, direction);
       atNewestEdgeRef.current = atEdge;
       if (atEdge) userReachedEdgeRef.current = true;
       // Reaching the newest edge clears the unread-new chip and marks
@@ -349,12 +479,14 @@ export function TimelineList({
           crossedMarkersRef.current.add(key);
         }
         unseenMarkersRef.current.clear();
+      } else {
+        // Per-divider crossing for both top-level and in-thread markers is
+        // decided by actual divider rect geometry (isDividerPast), not by
+        // visible row index.
+        measureAndCrossMarkers();
       }
-      // Per-divider crossing for both top-level and in-thread markers is
-      // handled in handleViewableItemsChanged using FlashList's viewable
-      // row indices.
     },
-    [direction, newCount],
+    [direction, newCount, measureAndCrossMarkers],
   );
 
   // When direction changes, snapshot whether the user was at the OLD
@@ -432,84 +564,30 @@ export function TimelineList({
     ];
   }, [data, dividerPlan.topInsertIdx]);
 
-  // Viewability-driven divider crossing. The divider is "past" once it
-  // has scrolled above the viewport top — detected via FlashList's
-  // viewable indices: if the smallest visible index is greater than a
-  // marker row's index, that row is above the viewport.
-  //
-  // For an in-thread divider the marker is rendered INSIDE its parent
-  // CommentCard (not a separate row), so we conservatively treat it as
-  // crossed when the parent row itself is above the viewport. This is
-  // slightly later than exact pixel crossing but is direction-symmetric
-  // and avoids a native measureLayout wiring pass.
-  const viewabilityConfig = useMemo(
-    () => ({ itemVisiblePercentThreshold: 1 }),
-    [],
-  );
-  const handleViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (unseenMarkersRef.current.size === 0) return;
-      const minVisibleIdx = viewableItems.reduce(
-        (acc, v) => (v.index != null && v.index < acc ? v.index : acc),
-        Number.POSITIVE_INFINITY,
-      );
-      if (!Number.isFinite(minVisibleIdx)) return;
-
-      // Top-level sentinel crossing.
-      if (unseenMarkersRef.current.has(TOP_MARKER_ID)) {
-        const dividerIdx = dataWithDivider.findIndex(
-          (r) => r.entry.id === DIVIDER_ID,
-        );
-        if (dividerIdx >= 0 && minVisibleIdx > dividerIdx) {
-          markCrossed(TOP_MARKER_ID);
-        }
-      }
-
-      // In-thread dividers: find the rendered index of each parent row in
-      // dataWithDivider (the sentinel shifts indices by 1 when present).
-      for (const [rootId, replyId] of dividerPlan.unreadReplyByRoot) {
-        const markerKey = `reply:${replyId}`;
-        if (!unseenMarkersRef.current.has(markerKey)) continue;
-        const rowIdx = dataWithDivider.findIndex(
-          (r) => r.entry.id === rootId,
-        );
-        if (rowIdx >= 0 && minVisibleIdx > rowIdx) {
-          markCrossed(markerKey);
-        }
-      }
-    },
-    [dataWithDivider, dividerPlan.unreadReplyByRoot, markCrossed],
-  );
-
-  const handlerRef = useRef(handleViewableItemsChanged);
-  useEffect(() => {
-    handlerRef.current = handleViewableItemsChanged;
-  }, [handleViewableItemsChanged]);
-  const stableViewabilityHandler = useCallback(
-    (info: { viewableItems: ViewToken[] }) => handlerRef.current(info),
-    [],
-  );
-  const viewabilityCallbackPairs = useRef([
-    {
-      viewabilityConfig,
-      onViewableItemsChanged: stableViewabilityHandler,
-    },
-  ]);
-
   // On unmount, bump last-viewed to now only if the user actually caught
-  // up: every marker crossed OR they actively reached the newest edge.
-  // Opening the screen and leaving without scrolling leaves the snapshot
-  // alone so a next visit still shows the unread boundary.
+  // up. The decision is delegated to pure shouldMarkViewedOnUnmount (unit
+  // tested in lib/edge-geometry.test.ts). CRITICAL: read dividerPlan from a
+  // LIVE ref, not the first-render closure — on a cold load the first render
+  // has no entries yet (noDividers === true), and a cleanup bound to that
+  // closure would false-positive markViewed when the user leaves without
+  // scrolling, even after unread entries had arrived. The ref is reassigned
+  // every render so cleanup always sees the latest plan.
+  const dividerPlanRef = useRef(dividerPlan);
+  dividerPlanRef.current = dividerPlan;
   const markViewed = useLastViewedStore((s) => s.markViewed);
   useEffect(() => {
     const issueId = issue.id;
     return () => {
-      const noDividers =
-        dividerPlan.topInsertIdx < 0 &&
-        dividerPlan.unreadReplyByRoot.size === 0;
-      const allCrossed = unseenMarkersRef.current.size === 0;
-      const reachedEdge = userReachedEdgeRef.current;
-      if (noDividers || allCrossed || reachedEdge) {
+      const plan = dividerPlanRef.current;
+      const hasDividers =
+        plan.topInsertIdx >= 0 || plan.unreadReplyByRoot.size > 0;
+      if (
+        shouldMarkViewedOnUnmount({
+          hasDividers,
+          unseenMarkerCount: unseenMarkersRef.current.size,
+          userReachedEdge: userReachedEdgeRef.current,
+        })
+      ) {
         markViewed(issueId);
       }
     };
@@ -584,9 +662,16 @@ export function TimelineList({
         ItemSeparatorComponent={RowSeparator}
         renderItem={({ item }) => {
           if (item.entry.id === DIVIDER_ID) {
-            return <UnreadDivider />;
+            return (
+              <UnreadDivider
+                markerRef={(ref) => registerMarkerRef(TOP_MARKER_ID, ref)}
+                onLayout={() => measureAndCrossMarkers()}
+              />
+            );
           }
           if (item.entry.type === "comment") {
+            const unreadReplyId =
+              dividerPlan.unreadReplyByRoot.get(item.entry.id) ?? null;
             return (
               <CommentCard
                 entry={item.entry}
@@ -594,9 +679,14 @@ export function TimelineList({
                 issueId={issue.id}
                 issueIdentifier={issue.identifier}
                 highlightedCommentId={highlightedId}
-                unreadBeforeReplyId={
-                  dividerPlan.unreadReplyByRoot.get(item.entry.id) ?? null
+                unreadBeforeReplyId={unreadReplyId}
+                unreadMarkerRef={
+                  unreadReplyId
+                    ? (ref) =>
+                        registerMarkerRef(`reply:${unreadReplyId}`, ref)
+                    : null
                 }
+                onUnreadMarkerLayout={() => measureAndCrossMarkers()}
                 onHighlightMounted={handleHighlightMounted}
               />
             );
@@ -610,7 +700,6 @@ export function TimelineList({
         onMomentumScrollBegin={() =>
           useCommentSelectStore.getState().clear()
         }
-        viewabilityConfigCallbackPairs={viewabilityCallbackPairs.current}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -632,9 +721,19 @@ function RowSeparator() {
   return <View style={{ height: 12 }} />;
 }
 
-function UnreadDivider() {
+function UnreadDivider({
+  markerRef,
+  onLayout,
+}: {
+  markerRef?: (ref: View | null) => void;
+  onLayout?: () => void;
+}) {
   return (
-    <View className="flex-row items-center gap-2 px-4">
+    <View
+      ref={markerRef}
+      onLayout={onLayout}
+      className="flex-row items-center gap-2 px-4"
+    >
       <View className="flex-1 h-px bg-destructive/40" />
       <Text className="text-[10px] uppercase tracking-wider font-medium text-destructive">
         New

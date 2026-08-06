@@ -78,6 +78,13 @@ interface Props {
    *  falls inside a thread — root and early replies are read, later replies
    *  are unread. Nullish = no in-thread divider for this card. */
   unreadBeforeReplyId?: string | null;
+  /** Registers the in-thread unread divider's native View with the parent
+   *  list so its rect can be measured for pixel-exact crossing. Null when
+   *  this card has no in-thread divider. */
+  unreadMarkerRef?: ((ref: View | null) => void) | null;
+  /** Fires when the in-thread unread divider finishes layout, so the parent
+   *  can (re)measure its position without waiting for the next scroll. */
+  onUnreadMarkerLayout?: () => void;
   /** Fires once when the deep-link target (root or a reply) first mounts
    *  inside this card. TimelineList uses it to start the highlight-hold
    *  timer at mount rather than at data-arrival, so render-ahead doesn't
@@ -94,6 +101,8 @@ export function CommentCard({
   issueIdentifier,
   highlightedCommentId,
   unreadBeforeReplyId,
+  unreadMarkerRef,
+  onUnreadMarkerLayout,
   onHighlightMounted,
 }: Props) {
   // Resolved threads default to a single-line bar; tap expands in place for
@@ -204,7 +213,9 @@ export function CommentCard({
           {replies.map((reply) => (
             <View key={reply.id}>
               {unreadBeforeReplyId === reply.id ? (
-                <ThreadUnreadDivider />
+                <View ref={unreadMarkerRef} onLayout={onUnreadMarkerLayout}>
+                  <ThreadUnreadDivider />
+                </View>
               ) : null}
               <View className="border-t border-border/60 pt-3">
                 <CommentBody
