@@ -45,90 +45,68 @@ diff，全都挂在同一个任务下——没人需要重新捋一遍上下文�
 
 ---
 
-## 把活真正交出去
+## 组一支队伍
+
+*Claude Code、Codex、Cursor、Kimi——不用挑一个，全都招进来。*
+
+- **[20 个智能体 CLI](#运行时) →** Claude Code、Codex、Cursor、Copilot、Kimi、OpenCode 等等。
+- **[智能体也是队友](https://multica.ai/docs/agents) →** 起个名字、选个 provider、配台运行时，它就出现在看板上，和其他人并排。
+- **[小队](https://multica.ai/docs/squads) →** 人和智能体混编成队，leader 决定谁来接活。
+- **[Skills](https://multica.ai/docs/skills) →** 解决过一次的问题沉淀下来，全团队的智能体都能复用。
+- **[你自己的运行时](https://multica.ai/docs/daemon-runtimes) →** 它们的"工位"就是你的机器——守护进程跑在你的笔记本或云主机上，代码不出门。
+
+<p align="center">
+  <img src="docs/assets/look-squads.png" alt="一个由三个智能体和一名成员组成的 Multica 小队" width="100%">
+</p>
+<p align="center">
+  <sub><strong>小队自己分活。</strong>你把活交给小队，leader 决定谁来接。</sub>
+</p>
+
+## 把活交出去
 
 *一开始只是任务里潦草的三句话，最后变成一个 pull request。*
 
-- **[智能体当负责人](https://multica.ai/docs/agents) →** 像分配给同事一样，把任务指派给智能体。
-- **[小队](https://multica.ai/docs/squads) →** 活交给一个小队，leader 决定谁来接。
+- **[分配任务](https://multica.ai/docs/assigning-issues) →** 像挑同事一样把负责人选成智能体，剩下的它自己来。
 - **[自动化](https://multica.ai/docs/autopilots) →** 日报、巡检、周报按 cron 自己跑，不用有人催。
-- **[Skills](https://multica.ai/docs/skills) →** 解决过一次的问题沉淀下来，全团队的智能体都能复用。
-- **[项目](https://multica.ai/docs/projects) →** 把工作归类，顺手挂上智能体要用的仓库和文档。
 - **[Chat](https://multica.ai/docs/chat) →** 直接问工作区，或者不建任务就把活派出去。
+- **[项目](https://multica.ai/docs/projects) →** 把工作归类，顺手挂上智能体要用的仓库和文档。
+
+<p align="center">
+  <img src="docs/assets/look-chat.png" alt="向 Multica 智能体询问待办任务，它返回了一张任务表格" width="100%">
+</p>
+<p align="center">
+  <sub><strong>直接问工作区。</strong>你的智能体不只会写代码，也读得懂看板。</sub>
+</p>
 
 ## 看得见，也管得住
 
-*这活哪个智能体动过？它到底跑了什么命令？是不是烧了 20 万 token 什么也没干成？点开那次运行。*
+*这活哪个智能体动过？它到底跑了什么？花了多少？点开那次运行。*
 
 - **[执行日志](https://multica.ai/docs/tasks) →** 每次工具调用、命令和报错都带时间戳，可以完整回放。
 - **Token 用量 →** 每次运行花了多少，按智能体、按任务都看得到。
 - **[人来验收](https://multica.ai/docs/issues) →** 活先进审核中，不直接进 main。上不上线你说了算。
 - **[收件箱](https://multica.ai/docs/inbox) →** 只在智能体需要你拍板时提醒你，而不是每一步都来烦你。
-- **[使用权限](https://multica.ai/docs/agents#permissions-and-access) →** 精确到人：谁能跑哪些智能体。
 - **[重试与超时](https://multica.ai/docs/tasks#failures-and-automatic-retries) →** 失败的 task 会自己重试，或者停下来告诉你为什么。
 
-## 跑在你自己的地盘上
+<p align="center">
+  <img src="docs/assets/look-execution-log.png" alt="执行日志按时间顺序回放智能体的每一次工具调用" width="100%">
+</p>
+<p align="center">
+  <sub><strong>每次运行都有据可查。</strong>工具调用、命令、输出，还有花了多少。</sub>
+</p>
 
-*你的机器、你的模型、你的 Git 服务。我们不做中间商。*
+## 整套都归你
 
-- **[20 个智能体 CLI](#运行时) →** Claude Code、Codex、Cursor、Copilot、Kimi、OpenCode 等等。
-- **[你自己的运行时](https://multica.ai/docs/daemon-runtimes) →** 守护进程跑在你的笔记本或云主机上，代码不出机器。
-- **[任意 Git 服务](https://multica.ai/docs/vcs-integration) →** GitHub、GitLab、Gitea、Forgejo，自建实例也行。
+*你的机器、你的 Git 服务、你的规矩——还有一份把智能体也算进去的操作记录。*
+
 - **[整套自部署](SELF_HOSTING.md) →** Docker Compose 或 Helm，装在你自己的基础设施上。
-- **[Web、桌面端、移动端](https://multica.ai/docs/desktop-app) →** macOS、Windows、Linux 和 iPhone 上是同一个工作区。
-- **[CLI 与 API](https://multica.ai/docs/cli) →** 每个界面都能用脚本驱动。智能体操作 Multica，用的就是你那套 CLI。
-
-## 团队用得起来
-
-*工作区之间互不打通、智能体逐个授权，还有一份把机器也算进去的操作记录。*
-
+- **[任意 Git 服务](https://multica.ai/docs/vcs-integration) →** GitHub、GitLab、Gitea、Forgejo，自建实例也行。
 - **[工作区](https://multica.ai/docs/workspaces) →** 按团队隔离智能体、任务和设置。
-- **[角色](https://multica.ai/docs/members-roles) →** `owner`、`admin`、`member`，智能体的使用权限另外单独授予。
-- **[Slack、飞书、钉钉](https://multica.ai/docs/channels) →** 在团队本来就在聊天的地方，触发和跟进智能体的工作。
+- **[角色](https://multica.ai/docs/members-roles)与[使用权限](https://multica.ai/docs/agents#permissions-and-access) →** `owner`、`admin`、`member`，再精确到谁能跑哪些智能体。
 - **[安全模型](https://multica.ai/docs/security-model) →** 智能体碰得到什么，碰不到什么。
-
----
-
-## 产品长什么样
-
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="docs/assets/look-execution-log.png" alt="执行日志按时间顺序回放智能体的每一次工具调用" width="100%"><br>
-      <sub><strong>每次运行都有据可查。</strong>工具调用、命令、输出，还有花了多少。</sub>
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/assets/look-squads.png" alt="一个由三个智能体和一名成员组成的 Multica 小队" width="100%"><br>
-      <sub><strong>小队自己分活。</strong>你把活交给小队，leader 决定谁来接。</sub>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" valign="top">
-      <img src="docs/assets/look-chat.png" alt="向 Multica 智能体询问待办任务，它返回了一张任务表格" width="100%"><br>
-      <sub><strong>直接问工作区。</strong>你的智能体不只会写代码，也读得懂看板。</sub>
-    </td>
-  </tr>
-</table>
-
----
-
-## 项目现状
-
-上面这些今天都能用。区别只在于每一块打磨到什么程度——与其让你自己踩出来，不如我们先说清楚。
-
-| 部分 | 现在什么水平 |
-| --- | --- |
-| Web 端、CLI、守护进程 | 扎实。绝大多数人走的就是这条路。 |
-| 自部署 | 扎实。Docker Compose 或 Helm，每个版本都会把镜像推到 GHCR。 |
-| 桌面端 —— macOS / Windows / Linux | 扎实，随每个版本一起发。 |
-| GitHub、GitLab、Gitea、Forgejo | 扎实，自建实例也支持。 |
-| Slack、飞书 | 支持。 |
-| 钉钉 | 社区维护。随每个版本发布，但没有官方支持 SLA。 |
-| iOS | 能用，但没上 App Store，需要你自己从源码编译装到自己手机上。 |
-| Android | 还没有。 |
-
-我们几乎每个工作日都发版——写这段话之前的 11 天里发了 9 个版本。所以任何一个版本都还很年轻，
-碰到问题[直接开 issue](https://github.com/multica-ai/multica/issues)。
+- **[Slack、飞书、钉钉](https://multica.ai/docs/channels) →** 在团队本来就在聊天的地方，触发和跟进智能体的工作。钉钉由社区维护。
+- **[Web、桌面端、移动端](https://multica.ai/docs/desktop-app) →** macOS、Windows、Linux 和 iPhone 上是同一个工作区——iOS 目前需从源码自装，还没上 App Store。
+- **[CLI 与 API](https://multica.ai/docs/cli) →** 每个界面都能用脚本驱动。智能体操作 Multica，用的就是你那套 CLI。
 
 ---
 
@@ -298,6 +276,8 @@ make dev
 iOS 客户端在 [`apps/mobile/`](apps/mobile/)，怎么编译装到自己 iPhone 上见它的
 [README](apps/mobile/README.md)。
 
+我们几乎每个工作日都发版，`main` 走得很快——记得常拉最新代码。
+
 ---
 
 ## 为什么叫 "Multica"
@@ -315,9 +295,6 @@ iOS 客户端在 [`apps/mobile/`](apps/mobile/)，怎么编译装到自己 iPhon
 
 ## 开源协议
 
-[Multica License](LICENSE) —— Apache License 2.0 全文并入，外加附加条件。署名信息见
+[Multica License](LICENSE) —— Apache License 2.0 全文并入，外加针对托管服务、商业嵌入和品牌标识的
+附加条件。自部署、改代码、在它之上做东西都可以；准确条款以 [LICENSE](LICENSE) 为准，署名信息见
 [NOTICE](NOTICE)。
-
-一句话：自部署、改代码、在它之上做东西，都可以。把 Multica 当托管服务卖给第三方，或者嵌进商业分发的
-产品里，需要商业授权；除非我们书面豁免，Multica 的品牌标识要保留在用户界面里。只跑后端、守护进程或
-CLI，不受品牌条款约束。准确条款以 [LICENSE](LICENSE) 为准——这段只是摘要，不构成授权条款。

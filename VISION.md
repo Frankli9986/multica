@@ -94,5 +94,5 @@ of record and action for human-agent work.**
 ## Where we are on that path
 
 This document describes the future Multica is building, not a feature list. For what actually
-works today — and how finished each part is — see [Project status](README.md#project-status) in
-the README.
+works today, see the [README](README.md) — everything listed there is live, and each feature
+links to its docs.

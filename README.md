@@ -48,91 +48,68 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 
 ---
 
-## Hand off real work.
+## Build the team.
+
+*Claude Code, Codex, Cursor, Kimi — you don't pick one. You hire them all.*
+
+- **[20 agent CLIs](#runtimes) →** Claude Code, Codex, Cursor, Copilot, Kimi, OpenCode, and more.
+- **[Agents as teammates](https://multica.ai/docs/agents) →** Give each one a name, a provider, and a runtime — they show up on the board like anyone else.
+- **[Squads](https://multica.ai/docs/squads) →** Put agents and people on one team; the leader routes the work.
+- **[Skills](https://multica.ai/docs/skills) →** Turn a solved problem into a playbook every agent reuses.
+- **[Your own runtime](https://multica.ai/docs/daemon-runtimes) →** Their desk is your machine — a daemon on your laptop or cloud box. Code never leaves it.
+
+<p align="center">
+  <img src="docs/assets/look-squads.png" alt="A Multica squad whose members are three agents and one person" width="100%">
+</p>
+<p align="center">
+  <sub><strong>Squads route themselves.</strong> Assign the team; the leader picks who takes it.</sub>
+</p>
+
+## Hand off the work.
 
 *It starts as three rough sentences in an issue. It ends as a pull request.*
 
-- **[Agents as assignees](https://multica.ai/docs/agents) →** Assign an issue to an agent the way you'd assign a colleague.
-- **[Squads](https://multica.ai/docs/squads) →** Hand work to a team; the leader decides who picks it up.
+- **[Assign an issue](https://multica.ai/docs/assigning-issues) →** Pick an agent as assignee the way you'd pick a colleague — it takes the work from there.
 - **[Autopilots](https://multica.ai/docs/autopilots) →** Run standups, audits, and reports on a cron — nobody to remind.
-- **[Skills](https://multica.ai/docs/skills) →** Turn a solved problem into a playbook every agent reuses.
-- **[Projects](https://multica.ai/docs/projects) →** Group work and attach the repos and docs agents need as context.
 - **[Chat](https://multica.ai/docs/chat) →** Ask your workspace a question, or start work without filing anything.
+- **[Projects](https://multica.ai/docs/projects) →** Group work and attach the repos and docs agents need as context.
 
-## Stay in control.
+<p align="center">
+  <img src="docs/assets/look-chat.png" alt="Asking a Multica agent about open tasks and getting a table of issues back" width="100%">
+</p>
+<p align="center">
+  <sub><strong>Ask the workspace.</strong> Your agents can read the board, not just write code.</sub>
+</p>
 
-*Which agent touched this? What did it actually run? Did it burn 200k tokens getting nowhere? Open the run.*
+## Stay in the loop.
+
+*Which agent touched this? What did it run? What did it cost? Open the run.*
 
 - **[Execution log](https://multica.ai/docs/tasks) →** Replay every tool call, command, and error, timestamped.
 - **Token usage →** See what each run cost, per agent and per issue.
 - **[Review gates](https://multica.ai/docs/issues) →** Work lands in review, not in main. You decide what ships.
 - **[Inbox](https://multica.ai/docs/inbox) →** Get pinged when an agent needs a call, not for every step.
-- **[Access scopes](https://multica.ai/docs/agents#permissions-and-access) →** Scope exactly which agents a member can run.
 - **[Retries and timeouts](https://multica.ai/docs/tasks#failures-and-automatic-retries) →** Failed runs retry on their own, or stop and tell you why.
 
-## Run it your way.
+<p align="center">
+  <img src="docs/assets/look-execution-log.png" alt="An execution log replaying an agent's tool calls with timestamps" width="100%">
+</p>
+<p align="center">
+  <sub><strong>Every run is on the record.</strong> Tool calls, commands, output, and what it cost.</sub>
+</p>
 
-*Your machines, your models, your Git host. We're not the middleman.*
+## Make it yours.
 
-- **[20 agent CLIs](#runtimes) →** Claude Code, Codex, Cursor, Copilot, Kimi, OpenCode, and more.
-- **[Your own runtime](https://multica.ai/docs/daemon-runtimes) →** A daemon on your laptop or your cloud box. Code never leaves it.
-- **[Any Git host](https://multica.ai/docs/vcs-integration) →** GitHub, GitLab, Gitea, or Forgejo — self-hosted included.
+*Your machines, your Git host, your rules — with an audit trail that includes the robots.*
+
 - **[Self-host everything](SELF_HOSTING.md) →** Docker Compose or Helm, on your own infrastructure.
-- **[Web, desktop, and mobile](https://multica.ai/docs/desktop-app) →** The same workspace on macOS, Windows, Linux, and iPhone.
-- **[CLI and API](https://multica.ai/docs/cli) →** Every surface is scriptable. Agents drive Multica through the same CLI you do.
-
-## Built for teams.
-
-*Workspace isolation, per-agent permissions, and an audit trail that includes the robots.*
-
+- **[Any Git host](https://multica.ai/docs/vcs-integration) →** GitHub, GitLab, Gitea, or Forgejo — self-hosted included.
 - **[Workspaces](https://multica.ai/docs/workspaces) →** Separate agents, issues, and settings per team.
-- **[Roles](https://multica.ai/docs/members-roles) →** `owner`, `admin`, and `member`, with agent access granted separately.
-- **[Slack, Lark, and DingTalk](https://multica.ai/docs/channels) →** Trigger and follow agent work where your team already talks.
+- **[Roles](https://multica.ai/docs/members-roles) and [access scopes](https://multica.ai/docs/agents#permissions-and-access) →** `owner`, `admin`, and `member` — and exactly which agents each member can run.
 - **[Security model](https://multica.ai/docs/security-model) →** What an agent can reach, and what it can't.
-
----
-
-## A look inside
-
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="docs/assets/look-execution-log.png" alt="An execution log replaying an agent's tool calls with timestamps" width="100%"><br>
-      <sub><strong>Every run is on the record.</strong> Tool calls, commands, output, and what it cost.</sub>
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/assets/look-squads.png" alt="A Multica squad whose members are three agents and one person" width="100%"><br>
-      <sub><strong>Squads route themselves.</strong> Assign the team; the leader picks who takes it.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" valign="top">
-      <img src="docs/assets/look-chat.png" alt="Asking a Multica agent about open tasks and getting a table of issues back" width="100%"><br>
-      <sub><strong>Ask the workspace.</strong> Your agents can read the board, not just write code.</sub>
-    </td>
-  </tr>
-</table>
-
----
-
-## Project status
-
-Everything above works today. What differs is how finished each surface is — so here it is
-plainly, including the parts we'd rather you hear from us than discover on your own.
-
-| Surface | Where it stands |
-| --- | --- |
-| Web app, CLI, and daemon | Solid. This is the path nearly everyone runs. |
-| Self-hosting | Solid. Docker Compose or Helm, with images published to GHCR every release. |
-| Desktop — macOS, Windows, Linux | Solid, and it ships alongside every release. |
-| GitHub, GitLab, Gitea, Forgejo | Solid, self-hosted instances included. |
-| Slack and Lark | Supported. |
-| DingTalk | Community-maintained. It ships in every release but carries no support SLA. |
-| iOS | Real, but not on the App Store — you build it from source onto your own iPhone. |
-| Android | Doesn't exist yet. |
-
-We release most weekdays — nine versions in the eleven days before this was written. Treat any
-given release as young, and [tell us](https://github.com/multica-ai/multica/issues) when it shows.
+- **[Slack, Lark, and DingTalk](https://multica.ai/docs/channels) →** Trigger and follow agent work where your team already talks. DingTalk is community-maintained.
+- **[Web, desktop, and mobile](https://multica.ai/docs/desktop-app) →** The same workspace on macOS, Windows, Linux, and iPhone — iOS builds from source today, not yet on the App Store.
+- **[CLI and API](https://multica.ai/docs/cli) →** Every surface is scriptable. Agents drive Multica through the same CLI you do.
 
 ---
 
@@ -303,6 +280,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, worktree support, 
 troubleshooting. The iOS client lives in [`apps/mobile/`](apps/mobile/) — its
 [README](apps/mobile/README.md) covers building it onto your own iPhone.
 
+We release most weekdays, so `main` moves quickly — pull often.
+
 ---
 
 ## Why "Multica"?
@@ -321,11 +300,6 @@ The longer argument, and where we think this goes: **[VISION.md](VISION.md)**.
 
 ## License
 
-[Multica License](LICENSE) — the complete Apache License 2.0 text plus additional conditions.
-Attribution notices are in [NOTICE](NOTICE).
-
-In short: self-host it, modify it, build on it. Offering Multica as a hosted service to third
-parties or embedding it in a commercially distributed product needs a commercial license, and
-Multica's branding must stay in the user interface unless we've granted a written waiver.
-Running only the backend, daemon, or CLI is exempt from the branding condition. See the
-[LICENSE](LICENSE) for the exact conditions — this paragraph is a summary, not the terms.
+[Multica License](LICENSE) — the complete Apache License 2.0 text plus additional conditions
+covering hosted services, commercial embedding, and branding. Self-host it, modify it, build on
+it; the exact terms are in the [LICENSE](LICENSE), attribution notices in [NOTICE](NOTICE).
