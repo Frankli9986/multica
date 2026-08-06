@@ -205,9 +205,17 @@ RETURNING *;
 -- Used when revoking a leaving member's runtimes so agents pinned to those
 -- runtimes can no longer be assigned new work. Returns the affected rows so
 -- the caller can broadcast agent:archived per agent.
+--
+-- System agents are exempt: they belong to the workspace rather than to the
+-- member who happened to create them, and the workspace's entry point runs
+-- through one. Archiving Mika because a colleague left would take the default
+-- agent away from everyone. Its runtime does go offline with the departure, so
+-- it needs rebinding — but it stays visible and recoverable instead of
+-- vanishing.
 UPDATE agent
 SET archived_at = now(), archived_by = @archived_by, updated_at = now()
 WHERE runtime_id = ANY(@runtime_ids::uuid[]) AND archived_at IS NULL
+  AND (system_key IS NULL OR system_key = '')
 RETURNING *;
 
 -- name: ArchiveAgentsByIDs :many
@@ -918,6 +926,15 @@ WHERE session_id NOT IN (SELECT session_id FROM retired_sessions)
       AND COALESCE(failure_reason, '') NOT IN ('iteration_limit', 'agent_fallback_message', 'api_invalid_request', 'codex_semantic_inactivity', 'agent_error.context_overflow', 'codex_resume_oversized')
       AND NOT (COALESCE(error, '') ILIKE '%400%' AND COALESCE(error, '') ILIKE '%invalid_request_error%')
       AND NOT (COALESCE(error, '') ILIKE '%image dimensions exceed max allowed size%' AND COALESCE(error, '') ILIKE '%image.source.base64.data%')
+      -- A provider credential-resolution failure ("Could not resolve
+      -- authentication method...") is deterministic on resume: the missing
+      -- api_key / auth_token / header is baked into the session's provider
+      -- state, so replaying it reproduces the same provider error forever. It
+      -- is classified agent_error.unknown (resume-safe), so this text guard is
+      -- the only thing that keeps a wedged issue from resuming the same dead
+      -- session on its next trigger — there is no daemon upgrade to wait for.
+      -- Keep in sync with ResumeUnsafeFailure and GetLastChatTaskSession.
+      AND NOT (COALESCE(error, '') ILIKE '%could not resolve authentication method%')
       AND NOT (COALESCE(error, '') ~* 'must not be empty|must be non-?empty|must have non-?empty|non-?empty content|cannot be empty|should not be empty'
                AND COALESCE(error, '') ~* 'role[^a-z0-9]{0,2}assistant|assistant message|message at position|messages\.[0-9]|messages\[[0-9]')
     )
@@ -1752,4 +1769,37 @@ SET status = CASE WHEN EXISTS (
 ) THEN 'working' ELSE 'idle' END,
     updated_at = now()
 WHERE a.id = $1
+RETURNING *;
+
+-- name: GetAgentBySystemKey :one
+-- Resolves a workspace's built-in agent by its stable system_key. This is the
+-- identity lookup for system agents: their display name is owner-editable, so
+-- nothing server-side may key off it.
+SELECT * FROM agent
+WHERE workspace_id = $1 AND system_key = $2 AND archived_at IS NULL
+ORDER BY created_at ASC, id ASC
+LIMIT 1;
+
+-- name: CreateSystemUserAgent :one
+-- Creates a product-defined agent that members can still see, chat with, and
+-- assign issues to. Deliberately kind='user': kind='system' hides the row from
+-- agent lists and assignment surfaces and hard deletes it with its runtime.
+-- Every product-owned field is a server constant; instructions stays empty
+-- because the system half ships with the binary and is layered in at claim
+-- time, leaving this column free for the workspace's own notes.
+--
+-- CONTRACT: call only while holding the per-workspace mika advisory lock. The
+-- one-per-workspace invariant rests on a check inside that lock, not on a
+-- unique index — migration 172's index keys on (workspace_id, owner_id,
+-- runtime_id, system_key), so two different owners or runtimes are distinct
+-- tuples and would both insert.
+INSERT INTO agent (
+    workspace_id, name, description, avatar_url, runtime_mode, runtime_config,
+    runtime_id, model, visibility, permission_mode, max_concurrent_tasks,
+    owner_id, instructions, custom_env, custom_args, kind, system_key
+) VALUES (
+    @workspace_id, @name, @description, @avatar_url, @runtime_mode, '{}'::jsonb,
+    @runtime_id, @model, @visibility, @permission_mode, @max_concurrent_tasks,
+    @owner_id, '', '{}'::jsonb, '[]'::jsonb, 'user', @system_key
+)
 RETURNING *;
