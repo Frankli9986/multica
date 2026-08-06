@@ -58,13 +58,6 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 - **[Skills](https://multica.ai/docs/skills) →** Turn a solved problem into a playbook every agent reuses.
 - **[Your own runtime](https://multica.ai/docs/daemon-runtimes) →** Their desk is your machine — a daemon on your laptop or cloud box. Code never leaves it.
 
-<p align="center">
-  <img src="docs/assets/look-squads.png" alt="A Multica squad whose members are three agents and one person" width="100%">
-</p>
-<p align="center">
-  <sub><strong>Squads route themselves.</strong> Assign the team; the leader picks who takes it.</sub>
-</p>
-
 ## Hand off the work.
 
 *It starts as three rough sentences in an issue. It ends as a pull request.*
@@ -73,13 +66,6 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 - **[Autopilots](https://multica.ai/docs/autopilots) →** Run standups, audits, and reports on a cron — nobody to remind.
 - **[Chat](https://multica.ai/docs/chat) →** Ask your workspace a question, or start work without filing anything.
 - **[Projects](https://multica.ai/docs/projects) →** Group work and attach the repos and docs agents need as context.
-
-<p align="center">
-  <img src="docs/assets/look-chat.png" alt="Asking a Multica agent about open tasks and getting a table of issues back" width="100%">
-</p>
-<p align="center">
-  <sub><strong>Ask the workspace.</strong> Your agents can read the board, not just write code.</sub>
-</p>
 
 ## Stay in the loop.
 
@@ -90,13 +76,6 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 - **[Review gates](https://multica.ai/docs/issues) →** Work lands in review, not in main. You decide what ships.
 - **[Inbox](https://multica.ai/docs/inbox) →** Get pinged when an agent needs a call, not for every step.
 - **[Retries and timeouts](https://multica.ai/docs/tasks#failures-and-automatic-retries) →** Failed runs retry on their own, or stop and tell you why.
-
-<p align="center">
-  <img src="docs/assets/look-execution-log.png" alt="An execution log replaying an agent's tool calls with timestamps" width="100%">
-</p>
-<p align="center">
-  <sub><strong>Every run is on the record.</strong> Tool calls, commands, output, and what it cost.</sub>
-</p>
 
 ## Make it yours.
 

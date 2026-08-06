@@ -55,13 +55,6 @@ diff，全都挂在同一个任务下——没人需要重新捋一遍上下文�
 - **[Skills](https://multica.ai/docs/skills) →** 解决过一次的问题沉淀下来，全团队的智能体都能复用。
 - **[你自己的运行时](https://multica.ai/docs/daemon-runtimes) →** 它们的"工位"就是你的机器——守护进程跑在你的笔记本或云主机上，代码不出门。
 
-<p align="center">
-  <img src="docs/assets/look-squads.png" alt="一个由三个智能体和一名成员组成的 Multica 小队" width="100%">
-</p>
-<p align="center">
-  <sub><strong>小队自己分活。</strong>你把活交给小队，leader 决定谁来接。</sub>
-</p>
-
 ## 把活交出去
 
 *一开始只是任务里潦草的三句话，最后变成一个 pull request。*
@@ -70,13 +63,6 @@ diff，全都挂在同一个任务下——没人需要重新捋一遍上下文�
 - **[自动化](https://multica.ai/docs/autopilots) →** 日报、巡检、周报按 cron 自己跑，不用有人催。
 - **[Chat](https://multica.ai/docs/chat) →** 直接问工作区，或者不建任务就把活派出去。
 - **[项目](https://multica.ai/docs/projects) →** 把工作归类，顺手挂上智能体要用的仓库和文档。
-
-<p align="center">
-  <img src="docs/assets/look-chat.png" alt="向 Multica 智能体询问待办任务，它返回了一张任务表格" width="100%">
-</p>
-<p align="center">
-  <sub><strong>直接问工作区。</strong>你的智能体不只会写代码，也读得懂看板。</sub>
-</p>
 
 ## 看得见，也管得住
 
@@ -87,13 +73,6 @@ diff，全都挂在同一个任务下——没人需要重新捋一遍上下文�
 - **[人来验收](https://multica.ai/docs/issues) →** 活先进审核中，不直接进 main。上不上线你说了算。
 - **[收件箱](https://multica.ai/docs/inbox) →** 只在智能体需要你拍板时提醒你，而不是每一步都来烦你。
 - **[重试与超时](https://multica.ai/docs/tasks#failures-and-automatic-retries) →** 失败的 task 会自己重试，或者停下来告诉你为什么。
-
-<p align="center">
-  <img src="docs/assets/look-execution-log.png" alt="执行日志按时间顺序回放智能体的每一次工具调用" width="100%">
-</p>
-<p align="center">
-  <sub><strong>每次运行都有据可查。</strong>工具调用、命令、输出，还有花了多少。</sub>
-</p>
 
 ## 整套都归你
 
