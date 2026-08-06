@@ -1831,7 +1831,7 @@ func TestHermesClientExtractPromptResultTopLevelZeroFallsBackToMeta(t *testing.T
 	c.extractPromptResult(data)
 
 	want := TokenUsage{InputTokens: 100, OutputTokens: 20, CacheReadTokens: 5, CacheWriteTokens: 2}
-	if got.usage != want {
+	if got.usage.TokenUsage != want {
 		t.Fatalf("zero top-level usage should fall back to _meta: got %+v, want %+v", got.usage, want)
 	}
 }
@@ -2184,7 +2184,7 @@ while IFS= read -r line; do
       printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"ses_model","models":{"currentModelId":"nous:moonshotai/kimi-k2.6","availableModels":[{"modelId":"nous:moonshotai/kimi-k2.6","name":"moonshotai/kimi-k2.6"}]}}}\n' "$id"
       ;;
     *'"method":"session/prompt"'*)
-      printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn","usage":{"inputTokens":17,"outputTokens":5,"cachedReadTokens":3}}}\n' "$id"
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn","usage":{"inputTokens":17,"outputTokens":5,"cachedReadTokens":3,"cachedWriteTokens":2,"costUsdTicks":900}}}\n' "$id"
       exit 0
       ;;
   esac
@@ -2232,8 +2232,8 @@ func TestHermesBackendAttributesUsageToACPDefaultModel(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected usage under Hermes current model, got %+v", result.Usage)
 		}
-		if usage.InputTokens != 17 || usage.OutputTokens != 5 || usage.CacheReadTokens != 3 {
-			t.Fatalf("usage = %+v, want input=17 output=5 cache_read=3", usage)
+		if usage != (TokenUsage{InputTokens: 17, OutputTokens: 5, CacheReadTokens: 3, CacheWriteTokens: 2, CostUSDTicks: 900}) {
+			t.Fatalf("usage = %+v, want all prompt-result fields", usage)
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("timeout waiting for result")
