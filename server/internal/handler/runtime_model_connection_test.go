@@ -27,13 +27,18 @@ func TestRuntimeModelConnectionLifecycle(t *testing.T) {
 		t.Skip("database not available")
 	}
 
+	ctx := context.Background()
+	cache := withModelListStores(t)
 	runtimeID, runtimeOwnerID, plainMemberID := runtimeVisibilityFixture(t)
 	if _, err := testPool.Exec(
-		context.Background(),
+		ctx,
 		`UPDATE agent_runtime SET provider = 'pi' WHERE id = $1`,
 		runtimeID,
 	); err != nil {
 		t.Fatalf("make fixture a Pi runtime: %v", err)
+	}
+	if err := cache.Put(ctx, runtimeID, []ModelEntry{{ID: "No/models", Label: "No/models"}}, true); err != nil {
+		t.Fatalf("seed stale model cache: %v", err)
 	}
 
 	secret := "deepseek-secret-that-must-never-leak"
@@ -67,6 +72,9 @@ func TestRuntimeModelConnectionLifecycle(t *testing.T) {
 	if !saved.Configured || !saved.HasAPIKey {
 		t.Fatalf("saved connection should be configured: %+v", saved)
 	}
+	if snapshot, err := cache.Get(ctx, runtimeID); err != nil || snapshot != nil {
+		t.Fatalf("PUT should invalidate stale model catalog: snapshot=%v err=%v", snapshot, err)
+	}
 	if saved.Config.Provider != "deepseek" ||
 		saved.Config.BaseURL != "https://api.deepseek.com/" ||
 		saved.Config.Model != "deepseek-v4-flash" {
@@ -75,7 +83,7 @@ func TestRuntimeModelConnectionLifecycle(t *testing.T) {
 
 	var persistedKey string
 	if err := testPool.QueryRow(
-		context.Background(),
+		ctx,
 		`SELECT default_model_api_key FROM agent_runtime WHERE id = $1`,
 		runtimeID,
 	).Scan(&persistedKey); err != nil {
@@ -86,7 +94,7 @@ func TestRuntimeModelConnectionLifecycle(t *testing.T) {
 	}
 	var auditDetails []byte
 	if err := testPool.QueryRow(
-		context.Background(),
+		ctx,
 		`SELECT details FROM activity_log
 		 WHERE workspace_id = $1 AND action = $2
 		 ORDER BY created_at DESC LIMIT 1`,
@@ -116,7 +124,7 @@ func TestRuntimeModelConnectionLifecycle(t *testing.T) {
 		t.Fatalf("PUT preserving key: expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	if err := testPool.QueryRow(
-		context.Background(),
+		ctx,
 		`SELECT default_model_api_key FROM agent_runtime WHERE id = $1`,
 		runtimeID,
 	).Scan(&persistedKey); err != nil {
@@ -156,6 +164,9 @@ func TestRuntimeModelConnectionLifecycle(t *testing.T) {
 		t.Fatalf("plain member PUT: expected 403, got %d: %s", w.Code, w.Body.String())
 	}
 
+	if err := cache.Put(ctx, runtimeID, []ModelEntry{{ID: "deepseek/old", Label: "deepseek/old"}}, true); err != nil {
+		t.Fatalf("reseed stale model cache: %v", err)
+	}
 	w = httptest.NewRecorder()
 	testHandler.DeleteRuntimeModelConnection(
 		w,
@@ -175,6 +186,9 @@ func TestRuntimeModelConnectionLifecycle(t *testing.T) {
 	}
 	if cleared.Configured || cleared.HasAPIKey {
 		t.Fatalf("deleted connection still appears configured: %+v", cleared)
+	}
+	if snapshot, err := cache.Get(ctx, runtimeID); err != nil || snapshot != nil {
+		t.Fatalf("DELETE should invalidate stale model catalog: snapshot=%v err=%v", snapshot, err)
 	}
 }
 

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import type { UpdateRuntimeModelConnectionRequest } from "../types";
+import { runtimeModelsKeys } from "./models";
 import { runtimeKeys } from "./queries";
 import { workspaceKeys } from "../workspace/queries";
 import { agentTaskSnapshotKeys } from "../agents/queries";
@@ -77,8 +78,11 @@ export function useUpdateRuntimeModelConnection(wsId: string) {
       runtimeId: string;
       connection: UpdateRuntimeModelConnectionRequest;
     }) => api.updateRuntimeModelConnection(runtimeId, connection),
-    onSettled: () => {
+    onSettled: (_data, _error, variables) => {
       qc.invalidateQueries({ queryKey: runtimeKeys.all(wsId) });
+      qc.invalidateQueries({
+        queryKey: runtimeModelsKeys.forRuntime(variables.runtimeId),
+      });
     },
   });
 }
@@ -88,8 +92,9 @@ export function useDeleteRuntimeModelConnection(wsId: string) {
   return useMutation({
     mutationFn: (runtimeId: string) =>
       api.deleteRuntimeModelConnection(runtimeId),
-    onSettled: () => {
+    onSettled: (_data, _error, runtimeId) => {
       qc.invalidateQueries({ queryKey: runtimeKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: runtimeModelsKeys.forRuntime(runtimeId) });
     },
   });
 }

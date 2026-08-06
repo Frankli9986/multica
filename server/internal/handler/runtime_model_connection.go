@@ -155,6 +155,7 @@ func (h *Handler) UpdateRuntimeModelConnection(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, "failed to update model connection")
 		return
 	}
+	h.invalidateRuntimeModelCatalog(r, uuidToString(updated.ID))
 	h.publishRuntimeModelConnectionChange(r, updated, member)
 	writeJSON(w, http.StatusOK, runtimeModelConnectionResponse(updated))
 }
@@ -184,8 +185,18 @@ func (h *Handler) DeleteRuntimeModelConnection(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, "failed to delete model connection")
 		return
 	}
+	h.invalidateRuntimeModelCatalog(r, uuidToString(updated.ID))
 	h.publishRuntimeModelConnectionChange(r, updated, member)
 	writeJSON(w, http.StatusOK, runtimeModelConnectionResponse(updated))
+}
+
+func (h *Handler) invalidateRuntimeModelCatalog(r *http.Request, runtimeID string) {
+	if h.ModelCatalogCache == nil {
+		return
+	}
+	if err := h.ModelCatalogCache.Invalidate(r.Context(), runtimeID); err != nil {
+		slog.Warn("runtime model catalog cache invalidate failed", append(logger.RequestAttrs(r), "error", err, "runtime_id", runtimeID)...)
+	}
 }
 
 func createRuntimeModelConnectionActivity(r *http.Request, q *db.Queries, member db.Member, rt db.AgentRuntime, action string, keyRotated bool) error {
