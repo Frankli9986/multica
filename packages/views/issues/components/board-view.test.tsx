@@ -280,19 +280,38 @@ function renderBoard(issues: Issue[]) {
 }
 
 // The board's horizontal scroller. jsdom has no layout, so scrollLeft is backed
-// by a real value and clamped like the browser would.
-function findScroller(container: HTMLElement): HTMLDivElement {
+// by a real value and clamped like the browser would; scrollTop is tracked so
+// an accidental vertical write by the pan hook fails the test.
+function findScroller(container: HTMLElement): HTMLDivElement & {
+  __scrollTopWrites: number;
+} {
   const scroller = container.querySelector<HTMLDivElement>(".overflow-x-auto");
   if (!scroller) throw new Error("board scroll container not found");
   let scrollLeft = 0;
-  Object.defineProperty(scroller, "scrollLeft", {
-    configurable: true,
-    get: () => scrollLeft,
-    set: (value: number) => {
-      scrollLeft = Math.min(Math.max(value, 0), 2000);
+  let scrollTop = 0;
+  let scrollTopWrites = 0;
+  Object.defineProperties(scroller, {
+    scrollLeft: {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (value: number) => {
+        scrollLeft = Math.min(Math.max(value, 0), 2000);
+      },
+    },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTopWrites += 1;
+        scrollTop = Math.max(0, value);
+      },
+    },
+    __scrollTopWrites: {
+      configurable: true,
+      get: () => scrollTopWrites,
     },
   });
-  return scroller;
+  return scroller as HTMLDivElement & { __scrollTopWrites: number };
 }
 
 function pointer(opts: Record<string, unknown> = {}) {
@@ -349,6 +368,31 @@ describe("BoardView right-drag pan + deferred context menu", () => {
     expect(scroller.scrollLeft).toBe(100);
     fireEvent.pointerMove(scroller, pointer({ clientX: 240 }));
     expect(scroller.scrollLeft).toBe(60);
+
+    // Only the horizontal axis pans — scrollTop is never written.
+    expect(scroller.scrollTop).toBe(0);
+    expect(scroller.__scrollTopWrites).toBe(0);
+  });
+
+  it("does not hijack a left-button card drag (dnd-kit owns it)", async () => {
+    const issues = [
+      makeIssue({ id: "a1", title: "Board Card A" }),
+      makeIssue({ id: "a2", title: "Board Card B", status: "in_progress" }),
+    ];
+    const { container } = renderBoard(issues);
+    await screen.findByText("Board Card A");
+    const scroller = findScroller(container);
+
+    // A left-button drag is dnd-kit's contract: the pan hook must neither
+    // scroll nor suppress/restore anything.
+    fireEvent.pointerDown(scroller, pointer({ button: 0, clientX: 300 }));
+    fireEvent.pointerMove(scroller, pointer({ button: 0, clientX: 200 }));
+    fireEvent.pointerUp(scroller, pointer({ button: 0, clientX: 200 }));
+
+    expect(scroller.scrollLeft).toBe(0);
+    expect(scroller.scrollTop).toBe(0);
+    expect(scroller.__scrollTopWrites).toBe(0);
+    expect(cardMenuOpened()).toBe(false);
   });
 
   it("does not open a card menu after a pan that ends on a card", async () => {

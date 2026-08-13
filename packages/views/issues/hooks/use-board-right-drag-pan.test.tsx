@@ -53,7 +53,26 @@ function setup({
     },
   });
 
-  return { scroller, restore, setScrollLeft: (v: number) => (scrollLeft = v) };
+  // scrollTop must NEVER be touched by the pan hook. Track writes so an
+  // accidental vertical scroll fails the test instead of silently reading 0.
+  let scrollTop = 0;
+  let scrollTopWrites = 0;
+  Object.defineProperty(scroller, "scrollTop", {
+    configurable: true,
+    get: () => scrollTop,
+    set: (value: number) => {
+      scrollTopWrites += 1;
+      scrollTop = Math.max(0, value);
+    },
+  });
+
+  return {
+    scroller,
+    restore,
+    setScrollLeft: (v: number) => (scrollLeft = v),
+    getScrollTop: () => scrollTop,
+    getScrollTopWrites: () => scrollTopWrites,
+  };
 }
 
 function pointer(opts: Record<string, unknown> = {}) {
@@ -77,7 +96,7 @@ describe("useBoardRightDragPan", () => {
   });
 
   it("pans the container horizontally when right-dragging", () => {
-    const { scroller, setScrollLeft } = setup();
+    const { scroller, setScrollLeft, getScrollTopWrites } = setup();
     setScrollLeft(0);
 
     fireEvent.pointerDown(scroller, pointer({ clientX: 300 }));
@@ -89,6 +108,9 @@ describe("useBoardRightDragPan", () => {
     fireEvent.pointerMove(scroller, pointer({ clientX: 260 }));
     // Tracks the pointer from the gesture's origin, not incrementally.
     expect(scroller.scrollLeft).toBe(40);
+
+    // Only the horizontal axis moves — scrollTop is never written.
+    expect(getScrollTopWrites()).toBe(0);
   });
 
   it("does not move below the 5px threshold", () => {

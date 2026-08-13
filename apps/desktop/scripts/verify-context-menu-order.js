@@ -9,27 +9,35 @@
  *      know at contextmenu time whether the user will pan, and must suppress
  *      unconditionally while a gesture is armed, deciding at release.
  *   2. A renderer `preventDefault()` on `contextmenu` fully suppresses the
- *      main-process `context-menu` event (0 triggers) — the single gate that
- *      keeps the native menu from also popping during a pan.
+ *      main-process `context-menu` event — the single gate that keeps the
+ *      native menu from also popping during a pan.
  *
- * This script re-derives both from a live Electron instance and prints the
- * observed order + trigger counts. It is a documentation/regression aid, not
- * part of `make check-worktree` (it needs a built app + a display).
+ * This script re-derives both from a live Electron instance using REAL trusted
+ * mouse events (Playwright's `page.mouse` dispatches through the OS input
+ * pipeline, so the renderer sees `isTrusted === true` events — unlike a
+ * synthetic `dispatchEvent`, which never reaches the main-process
+ * `context-menu` at all). Both sides of the gate are asserted:
+ *
+ *   - an unprevented trusted right-click DOES trigger main-process
+ *     `context-menu` (count increases);
+ *   - a trusted right-click whose renderer handler calls `preventDefault()`
+ *     does NOT trigger it (count unchanged), and the renderer observes
+ *     `defaultPrevented === true`.
  *
  * Usage:
  *   node apps/desktop/scripts/verify-context-menu-order.js [path/to/out/main/index.js]
  *
- * Exit code 0 when both premises hold; non-zero + message when a premise is
+ * Exit code 0 when all premises hold; non-zero + message when a premise is
  * violated so a CI/PR author can catch a platform behavior change early.
  */
 /* eslint-disable import-x/no-extraneous-dependencies -- playwright is a root devDependency; this is a manual verification aid, not part of the build */
-/* eslint-disable no-undef -- document/PointerEvent/MouseEvent appear only inside page.evaluate() callbacks that run in the browser context */
+/* eslint-disable no-undef -- document/MouseEvent appear only inside page.evaluate() callbacks that run in the browser context */
 import { _electron as electron } from "playwright";
 import { existsSync } from "node:fs";
 
 const mainJs =
   process.argv[2] ??
-  new URL("../../out/main/index.js", import.meta.url).pathname;
+  new URL("../out/main/index.js", import.meta.url).pathname;
 
 if (!existsSync(mainJs)) {
   console.error(`Missing Electron main bundle: ${mainJs}`);
@@ -37,121 +45,184 @@ if (!existsSync(mainJs)) {
   process.exit(1);
 }
 
-const ORDER = [];
-const mainProcessMenuTriggers = { count: 0 };
-
 const app = await electron.launch({
   args: [mainJs],
-  onConsole: (msg) => {
-    const text = msg.text();
-    if (text.startsWith("[contextmenu-order]")) {
-      ORDER.push(text.replace("[contextmenu-order] ", ""));
-    }
-  },
+  timeout: 30_000,
 });
 
 const page = await app.firstWindow();
 await page.waitForLoadState("domcontentloaded");
 
-// Instrument the renderer: report the event order for a right-click and a
-// right-click drag, and count main-process `context-menu` events with and
-// without preventDefault.
-const collected = await page.evaluate(async () => {
-  const sequence = [];
-
-  const div = document.createElement("div");
-  div.id = "cm-probe";
-  div.style.cssText = "position:fixed;left:0;top:0;width:400px;height:400px;";
-  document.body.appendChild(div);
-
-  for (const name of ["pointermove", "pointerdown", "mousedown", "contextmenu", "pointerup", "mouseup"]) {
-    div.addEventListener(name, () => sequence.push(name), true);
+// Instrument the MAIN process: count every `context-menu` event the main
+// window's webContents emits. Playwright's app.evaluate runs in the main
+// process, so the counter lives on a main-process global that the Node side
+// reads back through a second app.evaluate call.
+await app.evaluate(({ BrowserWindow, app }) => {
+  globalThis.__cmMainProcessCount = 0;
+  const count = () => {
+    globalThis.__cmMainProcessCount += 1;
+  };
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.on("context-menu", count);
   }
-
-  // Premise 1: right-click (press + release in place).
-  div.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 100, clientY: 100 }));
-  div.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 2, pointerId: 1, clientX: 100, clientY: 100 }));
-  div.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 2, clientX: 100, clientY: 100 }));
-  div.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 100, clientY: 100 }));
-  div.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 2, pointerId: 1, clientX: 100, clientY: 100 }));
-  div.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 2, clientX: 100, clientY: 100 }));
-  const stillClickOrder = [...sequence];
-  sequence.length = 0;
-
-  // Premise 1b: right-drag (move past threshold before release).
-  div.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 2, pointerId: 2, clientX: 100, clientY: 100 }));
-  div.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 2, clientX: 100, clientY: 100 }));
-  div.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 100, clientY: 100 }));
-  div.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 2, pointerId: 2, clientX: 200, clientY: 100 }));
-  div.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 2, pointerId: 2, clientX: 200, clientY: 100 }));
-  div.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 2, clientX: 200, clientY: 100 }));
-  const dragOrder = [...sequence];
-
-  div.remove();
-  return { stillClickOrder, dragOrder };
-});
-
-// Premise 2: renderer preventDefault gates the main-process menu. Use the app's
-// own IPC bridge for a menu-less contextmenu and observe the main-process count.
-const preventedCount = await page.evaluate(async () => {
-  // Expose a counter through a fresh event handler on a disposable element.
-  const el = document.createElement("div");
-  el.id = "cm-prevent";
-  document.body.appendChild(el);
-  const ev = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 50, clientY: 50 });
-  el.dispatchEvent(ev);
-  const prevented = ev.defaultPrevented;
-  el.remove();
-  return { prevented };
-});
-
-// Main-process context-menu trigger count is surfaced by the probe window
-// title so we can read it back without extra IPC wiring.
-await app.evaluate(({ BrowserWindow }) => {
-  const win = BrowserWindow.getAllWindows()[0];
-  win.webContents.on("context-menu", () => {
-    mainProcessMenuTriggers.count += 1;
+  app.on("browser-window-created", (_event, win) => {
+    win.webContents.on("context-menu", count);
   });
 });
+
+const mainProcessCount = () =>
+  app.evaluate(() => globalThis.__cmMainProcessCount ?? 0);
+
+// ── Probe A: order-only listeners, NO preventDefault handler ────────────────
+// Measures the trusted-event order (premise 1) and the unprevented gate
+// (premise 2a): a real right-click must reach the main process.
 await page.evaluate(() => {
-  const el = document.createElement("div");
-  el.id = "cm-main-probe";
-  document.body.appendChild(el);
-  const ev = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 60, clientY: 60 });
-  el.dispatchEvent(ev);
-  el.remove();
+  const probe = document.createElement("div");
+  probe.id = "cm-probe-a";
+  probe.style.cssText =
+    "position:fixed;left:0;top:0;width:600px;height:600px;z-index:999999;";
+  document.body.appendChild(probe);
+
+  window.__cmOrderA = [];
+  for (const name of [
+    "pointermove",
+    "pointerdown",
+    "mousedown",
+    "contextmenu",
+    "pointerup",
+    "mouseup",
+  ]) {
+    probe.addEventListener(name, () => window.__cmOrderA.push(name), true);
+  }
+  probe.addEventListener("contextmenu", (event) => {
+    window.__cmOrderA.push("defaultPrevented:" + event.defaultPrevented);
+  });
 });
 
-console.log("Right-click (no move) event order:", collected.stillClickOrder.join(" → "));
-console.log("Right-drag event order:          ", collected.dragOrder.join(" → "));
-console.log("Renderer preventDefault on contextmenu: ", preventedCount.prevented);
-console.log("Main-process context-menu triggers (prevented renderer event):", mainProcessMenuTriggers.count);
+const ORDER_A_POS = { x: 300, y: 300 };
 
-let ok = true;
-const cmIndexStill = collected.stillClickOrder.indexOf("contextmenu");
-const moveIndexStill = collected.stillClickOrder.indexOf("pointermove");
-if (cmIndexStill === -1) {
-  console.error("VIOLATION: no contextmenu observed on right-click");
-  ok = false;
-} else if (moveIndexStill !== -1 && cmIndexStill > moveIndexStill) {
-  // In the acceptance model contextmenu precedes any threshold move; if the
-  // first pointermove is a press-jitter move that is fine, we only care that
-  // contextmenu is not deferred past the first move on a stationary click.
+async function trustedRightClick(x, y) {
+  await page.mouse.move(x, y);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.up({ button: "right" });
+  // Give the main-process IPC a beat to land before reading the counter.
+  await new Promise((resolve) => setTimeout(resolve, 300));
 }
 
-// The drag order must show contextmenu BEFORE the post-threshold pointermove.
-const cmIndexDrag = collected.dragOrder.indexOf("contextmenu");
-const firstMove = collected.dragOrder.findIndex((n) => n === "pointermove");
-if (cmIndexDrag === -1 || (firstMove !== -1 && cmIndexDrag > firstMove)) {
+// Premise 2a first (clean counter), then premise 1's stationary order.
+await page.evaluate(() => {
+  window.__cmOrderA.length = 0;
+});
+const countBeforeA = await mainProcessCount();
+await trustedRightClick(ORDER_A_POS.x, ORDER_A_POS.y);
+const countAfterA = await mainProcessCount();
+const orderA = await page.evaluate(() => [...window.__cmOrderA]);
+
+// Premise 1b: a trusted right-drag — contextmenu must precede the first
+// threshold-crossing pointermove.
+await page.evaluate(() => {
+  window.__cmOrderA.length = 0;
+});
+await page.mouse.move(ORDER_A_POS.x, ORDER_A_POS.y);
+await page.mouse.down({ button: "right" });
+await page.mouse.move(ORDER_A_POS.x - 120, ORDER_A_POS.y, { steps: 6 });
+await page.mouse.up({ button: "right" });
+await new Promise((resolve) => setTimeout(resolve, 300));
+const orderADrag = await page.evaluate(() => [...window.__cmOrderA]);
+
+// ── Probe B: preventDefault handler, no other listeners ─────────────────────
+// Premise 2b: a renderer preventDefault() must suppress the main-process
+// `context-menu`, and the event must carry defaultPrevented === true.
+await page.evaluate(() => {
+  const probe = document.createElement("div");
+  probe.id = "cm-probe-b";
+  probe.style.cssText =
+    "position:fixed;left:0;top:0;width:600px;height:600px;z-index:999999;";
+  document.body.appendChild(probe);
+
+  window.__cmPrevented = [];
+  probe.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    window.__cmPrevented.push(event.defaultPrevented);
+  });
+});
+
+const countBeforeB = await mainProcessCount();
+await trustedRightClick(ORDER_A_POS.x + 200, ORDER_A_POS.y + 200);
+const countAfterB = await mainProcessCount();
+const prevented = await page.evaluate(() => [...window.__cmPrevented]);
+
+console.log(
+  "Trusted right-click (no move) event order:",
+  orderA.join(" → "),
+);
+console.log(
+  "Trusted right-drag event order:",
+  orderADrag.join(" → "),
+);
+console.log(
+  "Main-process context-menu triggers after unprevented right-click:",
+  countAfterA - countBeforeA,
+);
+console.log(
+  "Main-process context-menu triggers after preventDefault'd right-click:",
+  countAfterB - countBeforeB,
+);
+console.log("Renderer defaultPrevented after preventDefault():", prevented[0]);
+
+let ok = true;
+
+// Premise 1: contextmenu fires as part of a trusted stationary right-click.
+if (orderA.indexOf("contextmenu") === -1) {
+  console.error("VIOLATION: no contextmenu observed on trusted right-click");
+  ok = false;
+}
+
+// Premise 1b: on a trusted right-drag, contextmenu must precede the first
+// pointermove that happens AFTER the press (the initial move positions the
+// cursor before the button goes down and is not part of the gesture).
+const dragCmIndex = orderADrag.indexOf("contextmenu");
+const dragDownIndex = orderADrag.indexOf("pointerdown");
+const postPressMoves = orderADrag
+  .map((name, index) => ({ name, index }))
+  .filter(
+    (item) =>
+      item.name === "pointermove" &&
+      dragDownIndex !== -1 &&
+      item.index > dragDownIndex,
+  );
+const firstPostPressMove = postPressMoves[0]?.index ?? -1;
+if (dragCmIndex === -1) {
+  console.error("VIOLATION: no contextmenu observed on trusted right-drag");
+  ok = false;
+} else if (firstPostPressMove !== -1 && dragCmIndex > firstPostPressMove) {
   console.error(
-    `VIOLATION: contextmenu (${cmIndexDrag}) did not precede the threshold move (${firstMove}) in the drag sequence`,
+    `VIOLATION: contextmenu (${dragCmIndex}) did not precede the first post-press move (${firstPostPressMove}) in the trusted drag sequence`,
   );
   ok = false;
 }
 
-if (mainProcessMenuTriggers.count > 0) {
+// Premise 2a: an unprevented trusted right-click MUST trigger the main
+// process. With a synthetic dispatchEvent this stayed at 0 forever — a real
+// event must increment the counter.
+if (countAfterA - countBeforeA !== 1) {
   console.error(
-    `VIOLATION: a renderer-prevented contextmenu still triggered ${mainProcessMenuTriggers.count} main-process menu(s)`,
+    `VIOLATION: unprevented trusted right-click triggered ${countAfterA - countBeforeA} main-process menu(s), expected 1`,
+  );
+  ok = false;
+}
+
+// Premise 2b: a preventDefault'd trusted right-click must NOT trigger the main
+// process, and the renderer must observe defaultPrevented === true.
+if (countAfterB - countBeforeB !== 0) {
+  console.error(
+    `VIOLATION: preventDefault'd trusted right-click still triggered ${countAfterB - countBeforeB} main-process menu(s)`,
+  );
+  ok = false;
+}
+if (prevented[0] !== true) {
+  console.error(
+    `VIOLATION: renderer observed defaultPrevented=${prevented[0]} after preventDefault()`,
   );
   ok = false;
 }

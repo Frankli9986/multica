@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { loginAsDefault, reloadAppPage } from "./helpers";
-import { TestApiClient } from "./fixtures";
+import { loginAsDefault, reloadAppPage, createTestApi } from "./helpers";
+import type { TestApiClient } from "./fixtures";
 
 // WS-227 / multica-ai#6700: right-drag horizontal pan on the issues board.
 // These run in the existing Chromium harness (the board is the default issues
@@ -12,7 +12,7 @@ test.describe("Board right-drag pan (multica-ai#6700)", () => {
   let api: TestApiClient;
 
   test.beforeEach(async ({ page }) => {
-    api = new TestApiClient();
+    api = await createTestApi();
     await loginAsDefault(page);
   });
 
@@ -34,7 +34,10 @@ test.describe("Board right-drag pan (multica-ai#6700)", () => {
     await reloadAppPage(page);
 
     const scroller = await findBoardScroller(page);
-    const before = await scroller.evaluate((el) => el.scrollLeft);
+    const before = await scroller.evaluate((el) => ({
+      scrollLeft: el.scrollLeft,
+      scrollTop: el.scrollTop,
+    }));
 
     // Right-button press + horizontal move → the board follows the cursor.
     const box = await scroller.boundingBox();
@@ -46,8 +49,13 @@ test.describe("Board right-drag pan (multica-ai#6700)", () => {
     });
     await page.mouse.up({ button: "right" });
 
-    const after = await scroller.evaluate((el) => el.scrollLeft);
-    expect(after).not.toBe(before);
+    const after = await scroller.evaluate((el) => ({
+      scrollLeft: el.scrollLeft,
+      scrollTop: el.scrollTop,
+    }));
+    expect(after.scrollLeft).not.toBe(before.scrollLeft);
+    // Horizontal pan only — scrollTop never moves.
+    expect(after.scrollTop).toBe(before.scrollTop);
   });
 
   test("right-drag does not open a card context menu", async ({ page }) => {
