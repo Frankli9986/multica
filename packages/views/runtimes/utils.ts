@@ -267,6 +267,13 @@ const MODEL_PRICING: Record<
   //    Only K2.6 is on the official price sheet today; earlier K2 variants
   //    are intentionally omitted until Moonshot publishes their rates. --
   "kimi-k2.6":          { input: 0.95, output: 4.00, cacheRead: 0.16,   cacheWrite: 0.95 },
+  // Kimi K3 (platform.kimi.ai/docs/pricing/chat-k3 via models.dev
+  // providers/moonshotai/models/kimi-k3.toml). Moonshot bills no separate
+  // cache write, so cacheWrite mirrors input (same convention as kimi-k2.6).
+  "kimi-k3":            { input: 3.0,  output: 15.0,  cacheRead: 0.30,   cacheWrite: 3.0 },
+  // Kimi Code CLI reports the same model as `kimi-code/k3`; provider-qualified
+  // because `k3` is a generic id (see the provider-qualified keys note above).
+  "kimi/k3":            { input: 3.0,  output: 15.0,  cacheRead: 0.30,   cacheWrite: 3.0 },
 
   // -- Zhipu z.ai (docs.z.ai/guides/overview/pricing). Free flash tiers
   //    are priced at 0 so they resolve cleanly instead of falling through
@@ -283,6 +290,30 @@ const MODEL_PRICING: Record<
   "glm-4.5-air":        { input: 0.2,  output: 1.1,  cacheRead: 0.03,   cacheWrite: 0.2 },
   "glm-4.5-airx":       { input: 1.1,  output: 4.5,  cacheRead: 0.22,   cacheWrite: 1.1 },
   "glm-4.5-flash":      { input: 0,    output: 0,    cacheRead: 0,      cacheWrite: 0 },
+
+  // -- Alibaba Qwen (models.dev providers/alibaba, accessed 2026-08-13;
+  //    sourced from alibabacloud.com model-studio pricing). qwen3.8-max is
+  //    priced at the published pay-as-you-go rate so the dashboard shows the
+  //    absolute cost even though the runtime reaches it through an Alibaba
+  //    Token/Coding Plan subscription. qwen3.8-max-preview stays at 0:
+  //    it is only served through the subscription (token-plan.cn-beijing.
+  //    maas.aliyuncs.com), which does not bill per token — 0 resolves
+  //    cleanly instead of tripping the unmapped diagnostic (same convention
+  //    as the free GLM flash tiers below). qwen3.6-flash carries no
+  //    published cache-read discount, so cacheRead stays 0. --
+  "qwen3.7-plus":       { input: 0.50,  output: 3.00,  cacheRead: 0.05,   cacheWrite: 0.625 },
+  "qwen3.6-flash":      { input: 0.1875, output: 1.125, cacheRead: 0,      cacheWrite: 0.234375 },
+  "qwen3.8-max":        { input: 2.00,  output: 6.00,  cacheRead: 0.25,   cacheWrite: 2.5 },
+  "qwen3.8-max-preview":{ input: 0,      output: 0,     cacheRead: 0,      cacheWrite: 0 },
+
+  // -- Volcengine Ark (ark.cn-beijing.volces.com). `ark-code-latest` is the
+  //    rolling alias for Volcengine's current coding model
+  //    (doubao-seed-evolving as of 2026-08-13). Official price sheet
+  //    (docs.volcengine.com/docs/82379/1099320, updated 2026-08-12) lists
+  //    CNY per MTok: 6.00 in / 30.00 out / 1.20 cached; converted at
+  //    7.15 CNY/USD. Volcengine bills no separate cache write, so cacheWrite
+  //    mirrors input (same convention as DeepSeek/Moonshot). --
+  "ark-code-latest":    { input: 0.84,   output: 4.20,  cacheRead: 0.17,   cacheWrite: 0.84 },
 
   // -- xAI Grok (docs.x.ai/developers/pricing). Rates below are the
   //    short-context tier, and are now only a FALLBACK for Grok: xAI reports
@@ -461,8 +492,15 @@ function canonicalCandidates(model: string): string[] {
   const stripDate = (s: string) =>
     s.replace(/-(20\d{2}-\d{2}-\d{2}|20\d{6}|latest)$/, "");
   const stripProvider = (s: string) => {
+    // Routing prefixes come in two flavours: `vendor/model` (opencode-style)
+    // and `provider:model` (Hermes custom providers). Take whichever
+    // separator comes first so mixed forms still resolve.
     const i = s.indexOf("/");
-    return i > 0 && /^[a-z][a-z0-9_-]*$/i.test(s.slice(0, i)) ? s.slice(i + 1) : s;
+    const j = s.indexOf(":");
+    const sep = i === -1 ? j : j === -1 ? i : Math.min(i, j);
+    return sep > 0 && /^[a-z][a-z0-9_-]*$/i.test(s.slice(0, sep))
+      ? s.slice(sep + 1)
+      : s;
   };
   // Only Anthropic IDs are dot↔dash equivalent. OpenAI separators are
   // semantic, so we leave `gpt-5.4` etc. alone.
