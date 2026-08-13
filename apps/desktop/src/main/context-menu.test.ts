@@ -54,7 +54,8 @@ vi.mock("electron", () => {
   };
 });
 
-import { installContextMenu } from "./context-menu";
+import { installContextMenu, buildContextMenu, popContextMenuAt } from "./context-menu";
+import { parseShowContextMenuRequest } from "../shared/context-menu";
 
 type ContextMenuParams = {
   selectionText: string;
@@ -219,3 +220,140 @@ function invokeByLabel(label: string): void {
   if (!item) throw new Error(`menu item not found: ${label}`);
   item.click?.();
 }
+
+// --- buildContextMenu / popContextMenuAt (WS-227: renderer-triggered restore) ---
+
+describe("buildContextMenu", () => {
+  beforeEach(() => {
+    ctx.capturedItems.length = 0;
+    ctx.popupSpy.mockClear();
+    ctx.clipboardWriteText.mockClear();
+    ctx.openExternalSpy.mockClear();
+    ctx.browserWindowFromWebContents.mockReset();
+    ctx.preferredLanguagesRef.current = ["en-US"];
+  });
+
+  it("returns null for blank board space (no selection / no link / not editable)", () => {
+    const menu = buildContextMenu({
+      selectionText: "",
+      isEditable: false,
+      linkURL: "",
+      editFlags: { ...baseEditFlags },
+    });
+    expect(menu).toBeNull();
+    expect(ctx.popupSpy).not.toHaveBeenCalled();
+  });
+
+  it("builds a copy item when the renderer reports a selection", () => {
+    const menu = buildContextMenu({
+      selectionText: "  selected text  ",
+      isEditable: false,
+      linkURL: "",
+      editFlags: { ...baseEditFlags, canCopy: true },
+    });
+    expect(menu).not.toBeNull();
+    expect(menuItemRoles()).toContain("copy");
+  });
+
+  it("builds the link items from renderer-supplied linkURL", () => {
+    const menu = buildContextMenu({
+      selectionText: "",
+      isEditable: false,
+      linkURL: "https://multica.ai/welcome",
+      editFlags: { ...baseEditFlags },
+    });
+    expect(menu).not.toBeNull();
+    expect(lastMenuLabels()).toContain("Open Link in Browser");
+    expect(lastMenuLabels()).toContain("Copy Link Address");
+  });
+});
+
+describe("popContextMenuAt (menu:show-context IPC)", () => {
+  beforeEach(() => {
+    ctx.capturedItems.length = 0;
+    ctx.popupSpy.mockClear();
+    ctx.clipboardWriteText.mockClear();
+    ctx.openExternalSpy.mockClear();
+    ctx.preferredLanguagesRef.current = ["en-US"];
+  });
+
+  it("pops the rebuilt menu at the given viewport coordinates", () => {
+    const window = { id: 1 } as never;
+    popContextMenuAt(window, {
+      selectionText: "",
+      isEditable: false,
+      linkURL: "https://multica.ai/x",
+      editFlags: { ...baseEditFlags },
+    }, 120, 240);
+
+    expect(ctx.popupSpy).toHaveBeenCalledTimes(1);
+    expect(ctx.popupSpy).toHaveBeenCalledWith({ window, x: 120, y: 240 });
+  });
+
+  it("does not popup for blank space (empty menu)", () => {
+    popContextMenuAt({ id: 1 } as never, {
+      selectionText: "",
+      isEditable: false,
+      linkURL: "",
+      editFlags: { ...baseEditFlags },
+    }, 0, 0);
+
+    expect(ctx.popupSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("parseShowContextMenuRequest (IPC boundary validation)", () => {
+  it("accepts a well-formed payload", () => {
+    const parsed = parseShowContextMenuRequest({
+      x: 100,
+      y: 200,
+      params: {
+        selectionText: "hi",
+        isEditable: false,
+        linkURL: "https://multica.ai",
+        editFlags: { canCut: false, canCopy: true, canPaste: false, canSelectAll: false },
+      },
+    });
+    expect(parsed).toEqual({
+      x: 100,
+      y: 200,
+      params: {
+        selectionText: "hi",
+        isEditable: false,
+        linkURL: "https://multica.ai",
+        editFlags: { canCut: false, canCopy: true, canPaste: false, canSelectAll: false },
+      },
+    });
+  });
+
+  it("rejects non-finite coordinates", () => {
+    expect(parseShowContextMenuRequest({ x: NaN, y: 1, params: validParams() })).toBeNull();
+    expect(parseShowContextMenuRequest({ x: 1, y: Infinity, params: validParams() })).toBeNull();
+  });
+
+  it("rejects coordinates outside the sane range", () => {
+    expect(parseShowContextMenuRequest({ x: 1_000_000, y: 1, params: validParams() })).toBeNull();
+  });
+
+  it("rejects missing / wrong-typed params", () => {
+    expect(parseShowContextMenuRequest({ x: 1, y: 1, params: undefined })).toBeNull();
+    expect(parseShowContextMenuRequest({ x: 1, y: 1, params: { ...validParams().params, selectionText: 42 } })).toBeNull();
+    expect(parseShowContextMenuRequest({ x: 1, y: 1, params: { ...validParams().params, editFlags: { ...baseEditFlags, canCopy: "yes" } } })).toBeNull();
+  });
+
+  it("rejects non-object payloads", () => {
+    expect(parseShowContextMenuRequest(null)).toBeNull();
+    expect(parseShowContextMenuRequest("nope")).toBeNull();
+  });
+
+  function validParams() {
+    return {
+      params: {
+        selectionText: "hi",
+        isEditable: false,
+        linkURL: "https://multica.ai",
+        editFlags: { ...baseEditFlags },
+      },
+    };
+  }
+});

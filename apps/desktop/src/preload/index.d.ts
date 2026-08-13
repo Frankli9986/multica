@@ -16,6 +16,7 @@ import type {
   DaemonPrefs,
   LocalRuntimeProbe,
 } from "../shared/daemon-types";
+import type { ShowContextMenuRequest } from "../shared/context-menu";
 
 interface DesktopAPI {
   /** App version + normalized OS, captured synchronously at preload time. */
@@ -46,6 +47,10 @@ interface DesktopAPI {
   onInviteOpen: (callback: (invitationId: string) => void) => () => void;
   /** Open a URL in the default browser. */
   openExternal: (url: string) => Promise<void>;
+  /** Restore the native context menu at viewport coordinates. Used by the
+   *  issues board to bring back the menu it suppressed during a right-drag
+   *  pan on blank board space. */
+  showContextMenu: (request: ShowContextMenuRequest) => Promise<void>;
   /** Download a file by URL through Electron's native download system.
    *  Shows a native save dialog. On non-desktop platforms this is undefined. */
   downloadURL: (url: string) => Promise<void>;

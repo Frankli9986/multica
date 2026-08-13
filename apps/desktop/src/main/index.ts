@@ -8,7 +8,8 @@ import { setupAutoUpdater } from "./updater";
 import { setupDaemonManager } from "./daemon-manager";
 import { setupLocalDirectory } from "./local-directory";
 import { openExternalSafely, downloadURLSafely } from "./external-url";
-import { installContextMenu } from "./context-menu";
+import { installContextMenu, popContextMenuAt } from "./context-menu";
+import { parseShowContextMenuRequest } from "../shared/context-menu";
 import { handleAppShortcut } from "./keyboard-shortcuts";
 import { installNavigationGestures } from "./navigation-gestures";
 import { installNavigationGuard } from "./navigation-guard";
@@ -672,6 +673,18 @@ if (!gotTheLock) {
     // false configuration.
     ipcMain.handle("shell:openExternal", (_event, url: string) => {
       return openExternalSafely(url);
+    });
+
+    // Restore the native context menu the issues board suppressed during a
+    // right-drag pan (see shared/context-menu.ts for the payload contract).
+    // Sender + coordinates + params are validated: only a live window may
+    // popup, and only a well-formed payload can reach menu construction.
+    ipcMain.handle("menu:show-context", (event, request: unknown) => {
+      const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+      if (!sourceWindow) return;
+      const parsed = parseShowContextMenuRequest(request);
+      if (!parsed) return;
+      popContextMenuAt(sourceWindow, parsed.params, parsed.x, parsed.y);
     });
 
     // Renderer requests its own window close (e.g. Cmd+W on the last main

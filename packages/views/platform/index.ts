@@ -14,6 +14,11 @@ export {
   type LocalDaemonStatus,
 } from "./use-local-daemon-status";
 export {
+  isDesktopShowContextMenuAvailable,
+  showContextMenu,
+  type ShowContextMenuParams,
+} from "./show-context-menu";
+export {
   ScrollRestorationProvider,
   useRestoredScrollOffset,
   useRestoredScrollRef,

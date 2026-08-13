@@ -43,6 +43,8 @@ import type {
   IssueGroupPageState,
 } from "../surface/use-issue-group-branches";
 import { useDragSettle } from "./use-drag-settle";
+import { useBoardRightDragPan } from "../hooks/use-board-right-drag-pan";
+import { showContextMenu, type ShowContextMenuParams } from "../../platform";
 import { useT } from "../../i18n";
 import {
   type DragMoveUpdates,
@@ -153,6 +155,34 @@ function buildGroups(
 
 const EMPTY_PROGRESS_MAP = new Map<string, ChildProgress>();
 const EMPTY_IDS: string[] = [];
+
+// Reconstruct the subset of Electron's native `context-menu` params at a point,
+// so the main process can rebuild the exact menu it would have shown there.
+// Approximations: editFlags mirrors what the browser reports for an editable
+// target + current selection, sufficient for the board's blank-space case
+// (no selection / not editable / no link → empty menu → no popup).
+function buildNativeMenuParams(target: Element): ShowContextMenuParams {
+  const anchor = target.closest("a");
+  const isEditable =
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable);
+  const selectionText =
+    typeof window !== "undefined" ? window.getSelection()?.toString() ?? "" : "";
+  const hasSelection = selectionText.trim().length > 0;
+  return {
+    selectionText,
+    isEditable,
+    linkURL: anchor?.href ?? "",
+    editFlags: {
+      canCut: isEditable && hasSelection,
+      canCopy: hasSelection,
+      canPaste: isEditable,
+      canSelectAll: isEditable,
+    },
+  };
+}
 
 function BoardViewImpl({
   issues,
@@ -393,6 +423,46 @@ function BoardViewImpl({
     })
   );
 
+  // Right-drag horizontal pan + deferred context-menu suppression (WS-226 v3).
+  // On a stationary right-click the suppressed menu is restored at the release
+  // point: cards reopen their React `IssueActionsContextMenu` via a synthetic
+  // `contextmenu` (their handler preventDefaults it), blank space rebuilds the
+  // native menu through the desktop bridge. A release OUTSIDE the board (the
+  // pointer was captured, so pointerup still lands here) restores nothing — the
+  // suppressed menu belonged to the board, not whatever is under the cursor.
+  const boardScrollerRef = useRef<HTMLDivElement | null>(null);
+  const restoreContextMenu = useCallback(
+    ({ x, y }: { x: number; y: number }) => {
+      if (typeof document === "undefined") return;
+      const target = document.elementFromPoint(x, y);
+      if (!target || !boardScrollerRef.current?.contains(target)) return;
+      const synthetic = new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        button: 2,
+      });
+      target.dispatchEvent(synthetic);
+      // A card's React handler opened its menu and preventDefaulted the event;
+      // unprevented means blank board space → restore the native menu (no-op on
+      // web, which is the documented boundary).
+      if (!synthetic.defaultPrevented) {
+        showContextMenu(x, y, buildNativeMenuParams(target));
+      }
+    },
+    [],
+  );
+
+  const {
+    onPointerDown: panPointerDown,
+    onPointerMove: panPointerMove,
+    onPointerUp: panPointerUp,
+    onPointerCancel: panPointerCancel,
+    onLostPointerCapture: panLostPointerCapture,
+    onContextMenuCapture: panContextMenuCapture,
+  } = useBoardRightDragPan({ onRestoreMenu: restoreContextMenu });
+
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       isDraggingRef.current = true;
@@ -556,7 +626,16 @@ function BoardViewImpl({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex flex-1 min-h-0 gap-4 overflow-x-auto p-2">
+      <div
+        ref={boardScrollerRef}
+        className="flex flex-1 min-h-0 gap-4 overflow-x-auto p-2"
+        onPointerDown={panPointerDown}
+        onPointerMove={panPointerMove}
+        onPointerUp={panPointerUp}
+        onPointerCancel={panPointerCancel}
+        onLostPointerCapture={panLostPointerCapture}
+        onContextMenuCapture={panContextMenuCapture}
+      >
         {groups.length === 0 ? (
           groupBranches?.isError ? (
             <button

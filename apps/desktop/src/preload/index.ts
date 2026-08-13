@@ -19,6 +19,7 @@ import {
   readDesktopWindowContext,
   type IssueWindowRequest,
 } from "../shared/issue-window";
+import type { ShowContextMenuRequest } from "../shared/context-menu";
 import { AUTH_SESSION_STATE_CHANNEL } from "../shared/auth-session";
 import type {
   DaemonStatus,
@@ -146,6 +147,11 @@ const desktopAPI = {
     subscribeToMainRendererChannel("invite:open", callback),
   /** Open a URL in the default browser */
   openExternal: (url: string) => ipcRenderer.invoke("shell:openExternal", url),
+  /** Restore the native context menu at viewport coordinates. Used by the
+   *  issues board to bring back the menu it suppressed during a right-drag
+   *  pan on blank board space. */
+  showContextMenu: (request: ShowContextMenuRequest) =>
+    ipcRenderer.invoke("menu:show-context", request),
   /** Download a file by URL through Electron's native download system.
    *  Shows a save dialog and saves to disk. Unlike openExternal, this
    *  avoids browser rendering of HTML files on Linux.
