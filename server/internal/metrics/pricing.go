@@ -74,6 +74,29 @@ var modelPrices = map[string]ModelPrice{
 	"xai:grok-4.20-multi-agent-0309":   {Provider: "xai", Model: "grok-4.20-multi-agent-0309", InputPerM: 1.25, CacheReadPerM: 0.20, CacheWritePerM: 1.25, OutputPerM: 2.50},
 	"xai:grok-4.20-0309-reasoning":     {Provider: "xai", Model: "grok-4.20-0309-reasoning", InputPerM: 1.25, CacheReadPerM: 0.20, CacheWritePerM: 1.25, OutputPerM: 2.50},
 	"xai:grok-4.20-0309-non-reasoning": {Provider: "xai", Model: "grok-4.20-0309-non-reasoning", InputPerM: 1.25, CacheReadPerM: 0.20, CacheWritePerM: 1.25, OutputPerM: 2.50},
+	// Alibaba Qwen (models.dev providers/alibaba, accessed 2026-08-13;
+	// sourced from alibabacloud.com model-studio pricing). qwen3.8-max is
+	// priced at the published pay-as-you-go rate; qwen3.8-max-preview is
+	// served through the Alibaba Token Plan subscription, which does not bill
+	// per token, so it stays at 0 (same convention as the free GLM flash
+	// tiers). qwen3.6-flash carries no published cache-read discount, so
+	// CacheReadPerM stays 0. Mirror packages/views/runtimes/utils.ts.
+	"alibaba:qwen3.7-plus":        {Provider: "alibaba", Model: "qwen3.7-plus", InputPerM: 0.50, CacheReadPerM: 0.05, CacheWritePerM: 0.625, OutputPerM: 3.00},
+	"alibaba:qwen3.6-flash":       {Provider: "alibaba", Model: "qwen3.6-flash", InputPerM: 0.1875, CacheReadPerM: 0, CacheWritePerM: 0.234375, OutputPerM: 1.125},
+	"alibaba:qwen3.8-max":         {Provider: "alibaba", Model: "qwen3.8-max", InputPerM: 2.00, CacheReadPerM: 0.25, CacheWritePerM: 2.50, OutputPerM: 6.00},
+	"alibaba:qwen3.8-max-preview": {Provider: "alibaba", Model: "qwen3.8-max-preview", InputPerM: 0, CacheReadPerM: 0, CacheWritePerM: 0, OutputPerM: 0},
+	// Moonshot Kimi K3 (platform.kimi.ai/docs/pricing/chat-k3 via models.dev
+	// providers/moonshotai/models/kimi-k3.toml). Moonshot bills no separate
+	// cache write, so CacheWritePerM mirrors Input.
+	"moonshotai:kimi-k3": {Provider: "moonshotai", Model: "kimi-k3", InputPerM: 3.0, CacheReadPerM: 0.30, CacheWritePerM: 3.0, OutputPerM: 15.0},
+	// Volcengine Ark (ark.cn-beijing.volces.com). `ark-code-latest` is the
+	// rolling alias for Volcengine's current coding model
+	// (doubao-seed-evolving as of 2026-08-13). Official price sheet
+	// (docs.volcengine.com/docs/82379/1099320, updated 2026-08-12) lists
+	// CNY per MTok: 6.00 in / 30.00 out / 1.20 cached; converted at
+	// 7.15 CNY/USD. Volcengine bills no separate cache write, so
+	// CacheWritePerM mirrors Input.
+	"volcengine:ark-code-latest": {Provider: "volcengine", Model: "ark-code-latest", InputPerM: 0.84, CacheReadPerM: 0.17, CacheWritePerM: 0.84, OutputPerM: 4.20},
 }
 
 var modelAliasRules = []struct {
@@ -123,6 +146,19 @@ var modelAliasRules = []struct {
 	{regexp.MustCompile(`(^|/|:)grok-4\.20-multi-agent-0309$`), "xai:grok-4.20-multi-agent-0309"},
 	{regexp.MustCompile(`(^|/|:)grok-4\.20-0309-reasoning$`), "xai:grok-4.20-0309-reasoning"},
 	{regexp.MustCompile(`(^|/|:)grok-4\.20-0309-non-reasoning$`), "xai:grok-4.20-0309-non-reasoning"},
+	// Alibaba Qwen. qwen3.8-max is anchored so `qwen3.8-max-preview` (and its
+	// `[1m]` variant) never borrows the GA tier; the preview rule is a plain
+	// substring so `qwen3.8-max-preview[1m]` still resolves.
+	{regexp.MustCompile(`qwen3[.-]7-plus`), "alibaba:qwen3.7-plus"},
+	{regexp.MustCompile(`qwen3[.-]6-flash`), "alibaba:qwen3.6-flash"},
+	{regexp.MustCompile(`(^|/|:)qwen3[.-]8-max$`), "alibaba:qwen3.8-max"},
+	{regexp.MustCompile(`qwen3[.-]8-max-preview`), "alibaba:qwen3.8-max-preview"},
+	// Kimi K3. Anchored so the distinct CodeBuddy SKU `kimi-k3-1` stays
+	// unmapped; `kimi-code/k3` (Kimi Code CLI) resolves via the `/k3$` form.
+	{regexp.MustCompile(`(^|/|:)kimi-k3$`), "moonshotai:kimi-k3"},
+	{regexp.MustCompile(`(^|/|:)k3$`), "moonshotai:kimi-k3"},
+	// Volcengine Ark coding model (rolling alias).
+	{regexp.MustCompile(`ark-code-latest`), "volcengine:ark-code-latest"},
 }
 
 func PriceForModelAlias(model string) (ModelPrice, bool) {

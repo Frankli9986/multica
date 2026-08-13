@@ -210,3 +210,90 @@ func TestGrokPricingMatchesRecordedTurn(t *testing.T) {
 		t.Fatalf("recomputed cost = %.10f, want %.10f (xAI costUsdTicks)", got, wantUSD)
 	}
 }
+
+// TestPriceForModelAliasAlibabaMoonshotVolcengine pins the pay-as-you-go
+// rates for the Chinese-model runtimes (Qwen / Kimi / Volcengine Ark) added
+// from models.dev, and the transport spellings that reach them:
+// `provider:model` (Hermes custom providers), `provider/model` (opencode),
+// and bare ids.
+func TestPriceForModelAliasAlibabaMoonshotVolcengine(t *testing.T) {
+	cases := []struct {
+		model string
+		want  ModelPrice
+	}{
+		{
+			model: "qwen3.7-plus",
+			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.7-plus", InputPerM: 0.50, CacheReadPerM: 0.05, CacheWritePerM: 0.625, OutputPerM: 3.00},
+		},
+		{
+			model: "alibaba-coding-plan:qwen3.7-plus",
+			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.7-plus", InputPerM: 0.50, CacheReadPerM: 0.05, CacheWritePerM: 0.625, OutputPerM: 3.00},
+		},
+		{
+			model: "qwen3.6-flash",
+			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.6-flash", InputPerM: 0.1875, CacheReadPerM: 0, CacheWritePerM: 0.234375, OutputPerM: 1.125},
+		},
+		{
+			model: "alibaba-coding-plan:qwen3.8-max",
+			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.8-max", InputPerM: 2.00, CacheReadPerM: 0.25, CacheWritePerM: 2.50, OutputPerM: 6.00},
+		},
+		{
+			model: "custom:qwen3.8-max-preview[1m]",
+			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.8-max-preview", InputPerM: 0, CacheReadPerM: 0, CacheWritePerM: 0, OutputPerM: 0},
+		},
+		{
+			model: "kimi-coding:kimi-k3",
+			want:  ModelPrice{Provider: "moonshotai", Model: "kimi-k3", InputPerM: 3.0, CacheReadPerM: 0.30, CacheWritePerM: 3.0, OutputPerM: 15.0},
+		},
+		{
+			// Kimi Code CLI reports `kimi-code/k3`.
+			model: "kimi-code/k3",
+			want:  ModelPrice{Provider: "moonshotai", Model: "kimi-k3", InputPerM: 3.0, CacheReadPerM: 0.30, CacheWritePerM: 3.0, OutputPerM: 15.0},
+		},
+		{
+			model: "custom:ark-code-latest",
+			want:  ModelPrice{Provider: "volcengine", Model: "ark-code-latest", InputPerM: 0.84, CacheReadPerM: 0.17, CacheWritePerM: 0.84, OutputPerM: 4.20},
+		},
+	}
+
+	for _, tc := range cases {
+		got, ok := PriceForModelAlias(tc.model)
+		if !ok {
+			t.Fatalf("PriceForModelAlias(%q) did not resolve", tc.model)
+		}
+		if got != tc.want {
+			t.Fatalf("PriceForModelAlias(%q) = %+v, want %+v", tc.model, got, tc.want)
+		}
+	}
+}
+
+// TestPriceForModelAliasNoFalseBorrowing guards the anchored rules: a preview
+// SKU must not inherit the GA tier, a distinct CodeBuddy SKU must not inherit
+// Kimi K3, and an unknown variant must stay unmapped.
+func TestPriceForModelAliasNoFalseBorrowing(t *testing.T) {
+	for _, model := range []string{
+		"qwen3.8-max-preview",
+		"qwen3.8-max-preview[1m]",
+		"kimi-k3-1",
+		"qwen3.8-max-extra",
+	} {
+		got, ok := PriceForModelAlias(model)
+		if !ok {
+			continue
+		}
+		if got.Model == "qwen3.8-max" || got.Model == "kimi-k3" {
+			t.Fatalf("PriceForModelAlias(%q) borrowed %s; want the SKU's own tier or unmapped", model, got.Model)
+		}
+	}
+
+	// A distinct SKU that borrows nothing must resolve to its own row.
+	if got, ok := PriceForModelAlias("qwen3.8-max-preview[1m]"); !ok || got.Model != "qwen3.8-max-preview" {
+		t.Fatalf("qwen3.8-max-preview[1m] = %+v (ok=%v); want the preview row", got, ok)
+	}
+
+	for _, model := range []string{"qwen3.8-max-extra", "kimi-k3-1"} {
+		if _, ok := PriceForModelAlias(model); ok {
+			t.Fatalf("PriceForModelAlias(%q) unexpectedly resolved", model)
+		}
+	}
+}
