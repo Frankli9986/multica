@@ -291,29 +291,35 @@ const MODEL_PRICING: Record<
   "glm-4.5-airx":       { input: 1.1,  output: 4.5,  cacheRead: 0.22,   cacheWrite: 1.1 },
   "glm-4.5-flash":      { input: 0,    output: 0,    cacheRead: 0,      cacheWrite: 0 },
 
-  // -- Alibaba Qwen (models.dev providers/alibaba, accessed 2026-08-13;
-  //    sourced from alibabacloud.com model-studio pricing). qwen3.8-max is
-  //    priced at the published pay-as-you-go rate so the dashboard shows the
+  // -- Alibaba Qwen (International ≤256K tier; official sources:
+  //    alibabacloud.com/help/model-studio pricing sheet and
+  //    qwencloud.com/models/<model> pages, accessed 2026-08-12).
+  //    qwen3.7-plus: input $0.40 / output $1.60; qwen3.6-flash: input
+  //    $0.25 / output $1.50. Cache prices: Explicit Cache Creation = 1.25×
+  //    input (qwen3.7-plus $0.50, qwen3.6-flash $0.3125); Explicit Cache
+  //    Read = 10% of input (qwen3.7-plus $0.04, qwen3.6-flash $0.025).
+  //    qwen3.8-max is priced at the published pay-as-you-go rate
+  //    (qwencloud.com/models/qwen3.8-max: Input $2, Output $6, Implicit
+  //    Cache $0.25, Creation $2.5, Read $0.17; also listed on
+  //    alibabacloud.com/help model-pricing) so the dashboard shows the
   //    absolute cost even though the runtime reaches it through an Alibaba
   //    Token/Coding Plan subscription. qwen3.8-max-preview stays at 0:
   //    it is only served through the subscription (token-plan.cn-beijing.
   //    maas.aliyuncs.com), which does not bill per token — 0 resolves
   //    cleanly instead of tripping the unmapped diagnostic (same convention
-  //    as the free GLM flash tiers below). qwen3.6-flash carries no
-  //    published cache-read discount, so cacheRead stays 0. --
-  "qwen3.7-plus":       { input: 0.50,  output: 3.00,  cacheRead: 0.05,   cacheWrite: 0.625 },
-  "qwen3.6-flash":      { input: 0.1875, output: 1.125, cacheRead: 0,      cacheWrite: 0.234375 },
+  //    as the free GLM flash tiers below). --
+  "qwen3.7-plus":       { input: 0.40,  output: 1.60,  cacheRead: 0.04,   cacheWrite: 0.50 },
+  "qwen3.6-flash":      { input: 0.25,  output: 1.50,  cacheRead: 0.025,  cacheWrite: 0.3125 },
   "qwen3.8-max":        { input: 2.00,  output: 6.00,  cacheRead: 0.25,   cacheWrite: 2.5 },
   "qwen3.8-max-preview":{ input: 0,      output: 0,     cacheRead: 0,      cacheWrite: 0 },
 
-  // -- Volcengine Ark (ark.cn-beijing.volces.com). `ark-code-latest` is the
-  //    rolling alias for Volcengine's current coding model
-  //    (doubao-seed-evolving as of 2026-08-13). Official price sheet
-  //    (docs.volcengine.com/docs/82379/1099320, updated 2026-08-12) lists
-  //    CNY per MTok: 6.00 in / 30.00 out / 1.20 cached; converted at
-  //    7.15 CNY/USD. Volcengine bills no separate cache write, so cacheWrite
-  //    mirrors input (same convention as DeepSeek/Moonshot). --
-  "ark-code-latest":    { input: 0.84,   output: 4.20,  cacheRead: 0.17,   cacheWrite: 0.84 },
+  // -- Volcengine Ark (ark.cn-beijing.volces.com). `ark-code-latest` is a
+  //    rolling alias whose target the Volcengine console can switch between
+  //    model families, so it is not a stable model identity. Daemons report
+  //    the alias itself, not the resolved model, so there is no reliable
+  //    rate to attach — it deliberately stays unmapped (same philosophy as
+  //    xAI's `grok-composer-*`, see below), surfacing in the pricing dialog
+  //    instead of inheriting a guessed rate. --
 
   // -- xAI Grok (docs.x.ai/developers/pricing). Rates below are the
   //    short-context tier, and are now only a FALLBACK for Grok: xAI reports
@@ -493,14 +499,24 @@ function canonicalCandidates(model: string): string[] {
     s.replace(/-(20\d{2}-\d{2}-\d{2}|20\d{6}|latest)$/, "");
   const stripProvider = (s: string) => {
     // Routing prefixes come in two flavours: `vendor/model` (opencode-style)
-    // and `provider:model` (Hermes custom providers). Take whichever
-    // separator comes first so mixed forms still resolve.
-    const i = s.indexOf("/");
-    const j = s.indexOf(":");
-    const sep = i === -1 ? j : j === -1 ? i : Math.min(i, j);
-    return sep > 0 && /^[a-z][a-z0-9_-]*$/i.test(s.slice(0, sep))
-      ? s.slice(sep + 1)
-      : s;
+    // and `provider:model` (Hermes custom providers), and can nest
+    // (`custom:anthropic/claude-opus-4.7` is a provider-prefixed id whose
+    // model segment is itself provider-prefixed). Iteratively strip the
+    // earliest `/` or `:` separator while the preceding segment looks like a
+    // routing layer (`^[a-z][a-z0-9_-]*$`), until nothing valid remains to
+    // strip. The raw string is always the first candidate (see `push(raw)`
+    // below), so provider-qualified table keys like `cursor/composer-2.5`
+    // still resolve before any stripping happens — iterative peeling only
+    // ever adds previously-missed nested forms.
+    let out = s;
+    for (;;) {
+      const i = out.indexOf("/");
+      const j = out.indexOf(":");
+      const sep = i === -1 ? j : j === -1 ? i : Math.min(i, j);
+      if (sep <= 0 || !/^[a-z][a-z0-9_-]*$/i.test(out.slice(0, sep))) break;
+      out = out.slice(sep + 1);
+    }
+    return out;
   };
   // Only Anthropic IDs are dot↔dash equivalent. OpenAI separators are
   // semantic, so we leave `gpt-5.4` etc. alone.

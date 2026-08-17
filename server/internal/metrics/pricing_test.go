@@ -212,10 +212,11 @@ func TestGrokPricingMatchesRecordedTurn(t *testing.T) {
 }
 
 // TestPriceForModelAliasAlibabaMoonshotVolcengine pins the pay-as-you-go
-// rates for the Chinese-model runtimes (Qwen / Kimi / Volcengine Ark) added
-// from models.dev, and the transport spellings that reach them:
-// `provider:model` (Hermes custom providers), `provider/model` (opencode),
-// and bare ids.
+// rates for the Chinese-model runtimes (Qwen / Kimi) added from models.dev,
+// and the transport spellings that reach them: `provider:model` (Hermes
+// custom providers), `provider/model` (opencode), and bare ids. Volcengine's
+// `ark-code-latest` rolling alias is covered as unmapped in
+// TestPriceForModelAliasNoFalseBorrowing.
 func TestPriceForModelAliasAlibabaMoonshotVolcengine(t *testing.T) {
 	cases := []struct {
 		model string
@@ -223,15 +224,15 @@ func TestPriceForModelAliasAlibabaMoonshotVolcengine(t *testing.T) {
 	}{
 		{
 			model: "qwen3.7-plus",
-			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.7-plus", InputPerM: 0.50, CacheReadPerM: 0.05, CacheWritePerM: 0.625, OutputPerM: 3.00},
+			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.7-plus", InputPerM: 0.40, CacheReadPerM: 0.04, CacheWritePerM: 0.50, OutputPerM: 1.60},
 		},
 		{
 			model: "alibaba-coding-plan:qwen3.7-plus",
-			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.7-plus", InputPerM: 0.50, CacheReadPerM: 0.05, CacheWritePerM: 0.625, OutputPerM: 3.00},
+			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.7-plus", InputPerM: 0.40, CacheReadPerM: 0.04, CacheWritePerM: 0.50, OutputPerM: 1.60},
 		},
 		{
 			model: "qwen3.6-flash",
-			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.6-flash", InputPerM: 0.1875, CacheReadPerM: 0, CacheWritePerM: 0.234375, OutputPerM: 1.125},
+			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.6-flash", InputPerM: 0.25, CacheReadPerM: 0.025, CacheWritePerM: 0.3125, OutputPerM: 1.50},
 		},
 		{
 			model: "alibaba-coding-plan:qwen3.8-max",
@@ -251,8 +252,12 @@ func TestPriceForModelAliasAlibabaMoonshotVolcengine(t *testing.T) {
 			want:  ModelPrice{Provider: "moonshotai", Model: "kimi-k3", InputPerM: 3.0, CacheReadPerM: 0.30, CacheWritePerM: 3.0, OutputPerM: 15.0},
 		},
 		{
-			model: "custom:ark-code-latest",
-			want:  ModelPrice{Provider: "volcengine", Model: "ark-code-latest", InputPerM: 0.84, CacheReadPerM: 0.17, CacheWritePerM: 0.84, OutputPerM: 4.20},
+			// `custom:anthropic/claude-opus-4.7` (provider prefix + nested
+			// slash path) must still resolve to the anthropic Opus tier via
+			// substring matching, mirroring the frontend stripProvider
+			// regression case.
+			model: "custom:anthropic/claude-opus-4.7",
+			want:  ModelPrice{Provider: "anthropic", Model: "claude-opus-4.7", InputPerM: 5.00, CacheReadPerM: 0.50, CacheWritePerM: 6.25, OutputPerM: 25.00},
 		},
 	}
 
@@ -269,7 +274,8 @@ func TestPriceForModelAliasAlibabaMoonshotVolcengine(t *testing.T) {
 
 // TestPriceForModelAliasNoFalseBorrowing guards the anchored rules: a preview
 // SKU must not inherit the GA tier, a distinct CodeBuddy SKU must not inherit
-// Kimi K3, and an unknown variant must stay unmapped.
+// Kimi K3, unknown suffixed variants must stay unmapped, and the Volcengine
+// `ark-code-latest` rolling alias must stay unmapped.
 func TestPriceForModelAliasNoFalseBorrowing(t *testing.T) {
 	for _, model := range []string{
 		"qwen3.8-max-preview",
@@ -291,7 +297,14 @@ func TestPriceForModelAliasNoFalseBorrowing(t *testing.T) {
 		t.Fatalf("qwen3.8-max-preview[1m] = %+v (ok=%v); want the preview row", got, ok)
 	}
 
-	for _, model := range []string{"qwen3.8-max-extra", "kimi-k3-1"} {
+	for _, model := range []string{
+		"qwen3.8-max-extra",
+		"kimi-k3-1",
+		"qwen3.7-plus-extra",
+		"qwen3.6-flash-extra",
+		"qwen3.8-max-preview-extra",
+		"custom:ark-code-latest",
+	} {
 		if _, ok := PriceForModelAlias(model); ok {
 			t.Fatalf("PriceForModelAlias(%q) unexpectedly resolved", model)
 		}

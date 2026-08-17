@@ -349,11 +349,13 @@ describe("estimateCost", () => {
     });
     // 1M × $2 + 1M × $6 + 1M × $0.25 + 1M × $2.50 = $10.75.
     expect(cost).toBeCloseTo(10.75, 5);
-    expect(isModelPriced("custom:ark-code-latest", "hermes")).toBe(true);
+    // `ark-code-latest` is a rolling Volcengine alias, not a stable model
+    // identity, so it is deliberately unmapped after the prefix strip.
+    expect(isModelPriced("custom:ark-code-latest", "hermes")).toBe(false);
     expect(isModelPriced("kimi-coding:kimi-k3", "hermes")).toBe(true);
   });
 
-  it("prices the Qwen / Kimi / Ark models added from models.dev", () => {
+  it("prices the Qwen / Kimi models added from models.dev", () => {
     expect(
       estimateCost({
         ...zeroUsage,
@@ -361,7 +363,7 @@ describe("estimateCost", () => {
         input_tokens: 1_000_000,
         output_tokens: 1_000_000,
       }),
-    ).toBeCloseTo(3.5, 5); // $0.50 + $3.00
+    ).toBeCloseTo(2.0, 5); // $0.40 + $1.60 (International ≤256K tier)
     expect(
       estimateCost({
         ...zeroUsage,
@@ -374,11 +376,15 @@ describe("estimateCost", () => {
     expect(
       estimateCost({
         ...zeroUsage,
-        model: "ark-code-latest",
+        model: "qwen3.6-flash",
         input_tokens: 1_000_000,
         output_tokens: 1_000_000,
       }),
-    ).toBeCloseTo(5.04, 5); // $0.84 + $4.20
+    ).toBeCloseTo(1.75, 5); // $0.25 + $1.50 (International ≤256K tier)
+    // `ark-code-latest` is a rolling Volcengine alias (target switched in
+    // the console, possibly across model families), not a stable model
+    // identity — it stays unmapped like grok-composer-*.
+    expect(isModelPriced("ark-code-latest")).toBe(false);
   });
 
   it("keeps subscription-only and preview SKUs distinct from their GA siblings", () => {
@@ -399,6 +405,33 @@ describe("estimateCost", () => {
         input_tokens: 1_000_000,
       }),
     ).toBeCloseTo(2, 5);
+  });
+
+  it("iteratively strips nested routing prefixes (custom:anthropic/claude-opus-4.7)", () => {
+    // Regression for the review blocker: stripProvider used to peel a single
+    // `/` or `:` layer, so a Hermes-style `custom:anthropic/claude-opus-4.7`
+    // stopped at `anthropic/claude-opus-4.7` and missed the table while the
+    // backend substring rules matched it. Iterative peeling must resolve it
+    // to the Opus tier: 1M × $5 + 1M × $25 = $30.
+    const cost = estimateCost({
+      ...zeroUsage,
+      provider: "hermes",
+      model: "custom:anthropic/claude-opus-4.7",
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+    });
+    expect(cost).toBeCloseTo(30, 5);
+    expect(isModelPriced("custom:anthropic/claude-opus-4.7", "hermes")).toBe(true);
+  });
+
+  it("keeps unknown suffixed Qwen variants unmapped (anchored aliases)", () => {
+    // Regression for the review blocker: the backend alias regexes were
+    // unanchored substrings, so `qwen3.7-plus-extra` / `qwen3.8-max-preview-extra`
+    // silently borrowed a tier. The frontend exact matcher must agree and
+    // leave them unmapped so both sides surface the same diagnostics.
+    expect(isModelPriced("qwen3.7-plus-extra")).toBe(false);
+    expect(isModelPriced("qwen3.6-flash-extra")).toBe(false);
+    expect(isModelPriced("qwen3.8-max-preview-extra")).toBe(false);
   });
 
   it("returns 0 for a genuinely unknown model so the UI can flag it", () => {
