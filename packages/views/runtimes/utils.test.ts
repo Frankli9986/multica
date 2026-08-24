@@ -347,8 +347,8 @@ describe("estimateCost", () => {
       cache_read_tokens: 1_000_000,
       cache_write_tokens: 1_000_000,
     });
-    // 1M × $2 + 1M × $6 + 1M × $0.25 + 1M × $2.50 = $10.75.
-    expect(cost).toBeCloseTo(10.75, 5);
+    // 1M × $2 + 1M × $6 + 1M × $0.17 + 1M × $2.50 = $10.67.
+    expect(cost).toBeCloseTo(10.67, 5);
     // `ark-code-latest` is a rolling Volcengine alias, not a stable model
     // identity, so it is deliberately unmapped after the prefix strip.
     expect(isModelPriced("custom:ark-code-latest", "hermes")).toBe(false);

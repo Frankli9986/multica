@@ -298,19 +298,19 @@ const MODEL_PRICING: Record<
   //    $0.25 / output $1.50. Cache prices: Explicit Cache Creation = 1.25×
   //    input (qwen3.7-plus $0.50, qwen3.6-flash $0.3125); Explicit Cache
   //    Read = 10% of input (qwen3.7-plus $0.04, qwen3.6-flash $0.025).
-  //    qwen3.8-max is priced at the published pay-as-you-go rate
-  //    (qwencloud.com/models/qwen3.8-max: Input $2, Output $6, Implicit
-  //    Cache $0.25, Creation $2.5, Read $0.17; also listed on
-  //    alibabacloud.com/help model-pricing) so the dashboard shows the
-  //    absolute cost even though the runtime reaches it through an Alibaba
-  //    Token/Coding Plan subscription. qwen3.8-max-preview stays at 0:
+  // qwen3.8-max is priced at the published pay-as-you-go rate
+  // (qwencloud.com/models/qwen3.8-max: Input $2, Output $6, Implicit
+  // Cache $0.25, Creation $2.5, Explicit Cache Read $0.17; also listed on
+  // alibabacloud.com/help model-pricing) so the dashboard shows the
+  // absolute cost even though the runtime reaches it through an Alibaba
+  // Token/Coding Plan subscription. qwen3.8-max-preview stays at 0:
   //    it is only served through the subscription (token-plan.cn-beijing.
   //    maas.aliyuncs.com), which does not bill per token — 0 resolves
   //    cleanly instead of tripping the unmapped diagnostic (same convention
   //    as the free GLM flash tiers below). --
   "qwen3.7-plus":       { input: 0.40,  output: 1.60,  cacheRead: 0.04,   cacheWrite: 0.50 },
   "qwen3.6-flash":      { input: 0.25,  output: 1.50,  cacheRead: 0.025,  cacheWrite: 0.3125 },
-  "qwen3.8-max":        { input: 2.00,  output: 6.00,  cacheRead: 0.25,   cacheWrite: 2.5 },
+  "qwen3.8-max":        { input: 2.00,  output: 6.00,  cacheRead: 0.17,   cacheWrite: 2.5 },
   "qwen3.8-max-preview":{ input: 0,      output: 0,     cacheRead: 0,      cacheWrite: 0 },
 
   // -- Volcengine Ark (ark.cn-beijing.volces.com). `ark-code-latest` is a

@@ -236,7 +236,7 @@ func TestPriceForModelAliasAlibabaMoonshotVolcengine(t *testing.T) {
 		},
 		{
 			model: "alibaba-coding-plan:qwen3.8-max",
-			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.8-max", InputPerM: 2.00, CacheReadPerM: 0.25, CacheWritePerM: 2.50, OutputPerM: 6.00},
+			want:  ModelPrice{Provider: "alibaba", Model: "qwen3.8-max", InputPerM: 2.00, CacheReadPerM: 0.17, CacheWritePerM: 2.50, OutputPerM: 6.00},
 		},
 		{
 			model: "custom:qwen3.8-max-preview[1m]",
@@ -282,6 +282,9 @@ func TestPriceForModelAliasNoFalseBorrowing(t *testing.T) {
 		"qwen3.8-max-preview[1m]",
 		"kimi-k3-1",
 		"qwen3.8-max-extra",
+		"qwen3.8-max[",
+		"qwen3.8-max[1m]-extra",
+		"qwen3.8-max-preview[1m]-extra",
 	} {
 		got, ok := PriceForModelAlias(model)
 		if !ok {
@@ -293,8 +296,18 @@ func TestPriceForModelAliasNoFalseBorrowing(t *testing.T) {
 	}
 
 	// A distinct SKU that borrows nothing must resolve to its own row.
-	if got, ok := PriceForModelAlias("qwen3.8-max-preview[1m]"); !ok || got.Model != "qwen3.8-max-preview" {
-		t.Fatalf("qwen3.8-max-preview[1m] = %+v (ok=%v); want the preview row", got, ok)
+	for _, tc := range []struct {
+		model     string
+		wantModel string
+	}{
+		{"qwen3.8-max-preview[1m]", "qwen3.8-max-preview"},
+		{"qwen3.8-max-preview[context]", "qwen3.8-max-preview"},
+		{"qwen3.8-max[1m]", "qwen3.8-max"},
+	} {
+		got, ok := PriceForModelAlias(tc.model)
+		if !ok || got.Model != tc.wantModel {
+			t.Fatalf("PriceForModelAlias(%q) = %+v (ok=%v); want %s", tc.model, got, ok, tc.wantModel)
+		}
 	}
 
 	for _, model := range []string{
