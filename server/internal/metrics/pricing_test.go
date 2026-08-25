@@ -274,8 +274,10 @@ func TestPriceForModelAliasAlibabaMoonshotVolcengine(t *testing.T) {
 
 // TestPriceForModelAliasNoFalseBorrowing guards the anchored rules: a preview
 // SKU must not inherit the GA tier, a distinct CodeBuddy SKU must not inherit
-// Kimi K3, unknown suffixed variants must stay unmapped, and the Volcengine
-// `ark-code-latest` rolling alias must stay unmapped.
+// Kimi K3, unknown suffixed variants must stay unmapped, empty bracket tags
+// (`qwen3.7-plus[]` etc.) must stay unmapped to match the frontend's
+// `\[[^\]]+\]$` tag stripping, and the Volcengine `ark-code-latest` rolling
+// alias must stay unmapped.
 func TestPriceForModelAliasNoFalseBorrowing(t *testing.T) {
 	for _, model := range []string{
 		"qwen3.8-max-preview",
@@ -317,6 +319,12 @@ func TestPriceForModelAliasNoFalseBorrowing(t *testing.T) {
 		"qwen3.6-flash-extra",
 		"qwen3.8-max-preview-extra",
 		"custom:ark-code-latest",
+		// Empty bracket tags: the frontend's `\[[^\]]+\]$` tag stripper
+		// leaves these unmapped, so the backend must too.
+		"qwen3.7-plus[]",
+		"qwen3.6-flash[]",
+		"qwen3.8-max[]",
+		"qwen3.8-max-preview[]",
 	} {
 		if _, ok := PriceForModelAlias(model); ok {
 			t.Fatalf("PriceForModelAlias(%q) unexpectedly resolved", model)

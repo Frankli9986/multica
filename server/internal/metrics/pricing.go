@@ -151,14 +151,16 @@ var modelAliasRules = []struct {
 	{regexp.MustCompile(`(^|/|:)grok-4\.20-0309-non-reasoning$`), "xai:grok-4.20-0309-non-reasoning"},
 	// Alibaba Qwen. All rules are anchored so unknown suffixed variants
 	// (`qwen3.7-plus-extra`, `qwen3.8-max-preview-extra`) stay unmapped;
-	// an optional complete bracket tag `[…]` at the end is admitted to
-	// match the frontend's behavior of stripping the context tag. qwen3.8-max
-	// stays anchored so `qwen3.8-max-preview` (and its `[1m]` variant) never
-	// borrows the GA tier.
-	{regexp.MustCompile(`(^|/|:)qwen3[.-]7-plus(\[[^\]]*\])?$`), "alibaba:qwen3.7-plus"},
-	{regexp.MustCompile(`(^|/|:)qwen3[.-]6-flash(\[[^\]]*\])?$`), "alibaba:qwen3.6-flash"},
-	{regexp.MustCompile(`(^|/|:)qwen3[.-]8-max(\[[^\]]*\])?$`), "alibaba:qwen3.8-max"},
-	{regexp.MustCompile(`(^|/|:)qwen3[.-]8-max-preview(\[[^\]]*\])?$`), "alibaba:qwen3.8-max-preview"},
+	// an optional complete bracket tag `[…]` with at least one character
+	// inside is admitted to match the frontend's behavior of stripping the
+	// context tag (`\[[^\]]+\]$` in packages/views/runtimes/utils.ts), so
+	// empty tags like `qwen3.7-plus[]` stay unmapped on both sides.
+	// qwen3.8-max stays anchored so `qwen3.8-max-preview` (and its `[1m]`
+	// variant) never borrows the GA tier.
+	{regexp.MustCompile(`(^|/|:)qwen3[.-]7-plus(\[[^\]]+\])?$`), "alibaba:qwen3.7-plus"},
+	{regexp.MustCompile(`(^|/|:)qwen3[.-]6-flash(\[[^\]]+\])?$`), "alibaba:qwen3.6-flash"},
+	{regexp.MustCompile(`(^|/|:)qwen3[.-]8-max(\[[^\]]+\])?$`), "alibaba:qwen3.8-max"},
+	{regexp.MustCompile(`(^|/|:)qwen3[.-]8-max-preview(\[[^\]]+\])?$`), "alibaba:qwen3.8-max-preview"},
 	// Kimi K3. Anchored so the distinct CodeBuddy SKU `kimi-k3-1` stays
 	// unmapped; `kimi-code/k3` (Kimi Code CLI) resolves via the `/k3$` form.
 	{regexp.MustCompile(`(^|/|:)kimi-k3$`), "moonshotai:kimi-k3"},
