@@ -594,6 +594,8 @@
       "dialog_cancel": "取消",
       "dialog_add_action": "添加 Server",
       "dialog_update_action": "保存修改",
+      "dialog_replace_action": "替换配置",
+      "dialog_write_only_warning": "无法读取已保存的配置——表单为空白，保存后将整体替换该 Server 的现有配置。",
       "delete_dialog_title": "删除 MCP Server？",
       "delete_dialog_description": "{{name}} 将不再提供给该智能体；运行时中的 Server 不受影响。",
       "delete_action": "删除 Server",

@@ -274,6 +274,27 @@ describe("McpConfigTab", () => {
     });
   });
 
+  // GH #7923: the write-only replace warning is for entries whose saved
+  // config the caller could NOT read back. Here the real config is handed to
+  // the dialog, so no warning appears and the save button keeps its label.
+  it("edits a readable entry without the write-only replace warning", async () => {
+    const user = userEvent.setup();
+    renderTab({
+      mcp_config: {
+        version: 1,
+        mcpServers: { fetch: { command: "uvx" } },
+      },
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /edit mcp server fetch/i }),
+    );
+    expect(screen.queryByTestId("mcp-write-only-warning")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /save changes/i }),
+    ).toBeInTheDocument();
+  });
+
   it("deletes the last managed server only after confirmation", async () => {
     const user = userEvent.setup();
     const { onSave } = renderTab({

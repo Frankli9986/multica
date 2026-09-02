@@ -487,6 +487,8 @@
       "dialog_cancel": "キャンセル",
       "dialog_add_action": "Server を追加",
       "dialog_update_action": "変更を保存",
+      "dialog_replace_action": "設定を置き換え",
+      "dialog_write_only_warning": "保存済みの設定は読み取れないため、フォームは空の状態で開きます。保存すると既存の設定が丸ごと置き換えられます。",
       "delete_dialog_title": "MCP Server を削除しますか？",
       "delete_dialog_description": "{{name}} はこのエージェントで利用できなくなります。Runtime Server には影響しません。",
       "delete_action": "Server を削除",

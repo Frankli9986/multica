@@ -495,6 +495,8 @@
       "dialog_cancel": "취소",
       "dialog_add_action": "Server 추가",
       "dialog_update_action": "변경 저장",
+      "dialog_replace_action": "구성 바꾸기",
+      "dialog_write_only_warning": "저장된 구성을 읽을 수 없어 양식이 비어 있는 상태로 열립니다. 저장하면 기존 구성이 통째로 대체됩니다.",
       "delete_dialog_title": "MCP Server를 삭제할까요?",
       "delete_dialog_description": "{{name}}은 더 이상 이 에이전트에서 사용할 수 없습니다. Runtime Server에는 영향을 주지 않습니다.",
       "delete_action": "Server 삭제",

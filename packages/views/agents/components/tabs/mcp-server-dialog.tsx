@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@multica/ui/components/ui/button";
 import {
   Dialog,
@@ -244,6 +244,15 @@ export function McpServerDialog({
   // represent, so switching to it cannot rewrite them either.
   const formAvailable = !server || formSupportsServer(server);
 
+  // GH #7923: the workspace library is write-only, so an edit arrives with an
+  // empty config even though a saved entry exists. The form therefore shows
+  // nothing to prefill, and "Save" silently REPLACES the stored configuration.
+  // Say so where the decision is made instead of letting the empty form read
+  // as "the saved state". A caller that could hand us the real config (the
+  // agent's own MCP tab) passes it and never sees this warning.
+  const replacesUnreadableConfig =
+    !!server && Object.keys(server.config).length === 0;
+
   const jsonResult = useMemo(() => parseServerJson(jsonText), [jsonText]);
   const trimmedName = name.trim();
   const nameError =
@@ -350,6 +359,22 @@ export function McpServerDialog({
             </p>
           ) : null}
         </div>
+
+        {replacesUnreadableConfig ? (
+          <div
+            role="alert"
+            data-testid="mcp-write-only-warning"
+            className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-caption"
+          >
+            <TriangleAlert
+              className="mt-0.5 size-3.5 shrink-0 text-warning"
+              aria-hidden="true"
+            />
+            <span>
+              {t(($) => $.tab_body.mcp_config.dialog_write_only_warning)}
+            </span>
+          </div>
+        ) : null}
 
         <Tabs value={mode} onValueChange={handleModeChange}>
           <TabsList className="grid w-full grid-cols-2">
@@ -495,7 +520,9 @@ export function McpServerDialog({
               />
             )}
             {server
-              ? t(($) => $.tab_body.mcp_config.dialog_update_action)
+              ? replacesUnreadableConfig
+                ? t(($) => $.tab_body.mcp_config.dialog_replace_action)
+                : t(($) => $.tab_body.mcp_config.dialog_update_action)
               : t(($) => $.tab_body.mcp_config.dialog_add_action)}
           </Button>
         </DialogFooter>

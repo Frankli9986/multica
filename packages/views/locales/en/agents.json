@@ -606,6 +606,8 @@
       "dialog_cancel": "Cancel",
       "dialog_add_action": "Add Server",
       "dialog_update_action": "Save Changes",
+      "dialog_replace_action": "Replace Configuration",
+      "dialog_write_only_warning": "The saved configuration can't be read back — the form starts empty, and saving replaces the existing configuration for this server.",
       "delete_dialog_title": "Delete MCP Server?",
       "delete_dialog_description": "{{name}} will no longer be available to this agent. Runtime servers are not affected.",
       "delete_action": "Delete Server",

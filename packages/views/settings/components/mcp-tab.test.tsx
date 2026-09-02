@@ -126,7 +126,11 @@ describe("McpTab", () => {
     await user.clear(nameInput);
     await user.type(nameInput, "linear-v2");
     await user.type(screen.getByLabelText("Server URL"), "https://linear-v2.example");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    // GH #7923: the library is write-only, so the edit dialog must say the
+    // form starts empty and name the action for what it is — a wholesale
+    // replacement, not a tweak of hidden values.
+    expect(screen.getByTestId("mcp-write-only-warning")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Replace Configuration" }));
 
     await waitFor(() =>
       expect(mockUpdate).toHaveBeenCalledWith(
@@ -134,6 +138,17 @@ describe("McpTab", () => {
       ),
     );
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  // GH #7923: adding a server must NOT show the replace warning — there is
+  // nothing stored yet to overwrite, and the add button keeps its own label.
+  it("adds a server without the write-only replace warning", async () => {
+    const user = userEvent.setup();
+    render(<McpTab />, { wrapper: Wrapper });
+
+    await user.click(screen.getByRole("button", { name: /Add server/ }));
+    expect(screen.queryByTestId("mcp-write-only-warning")).toBeNull();
+    expect(screen.getByRole("button", { name: "Add Server" })).toBeInTheDocument();
   });
 
   // The saved entry cannot be read back, but the safe summary still knows the
