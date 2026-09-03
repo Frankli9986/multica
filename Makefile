@@ -40,6 +40,23 @@ define REQUIRE_ENV
 	fi
 endef
 
+# Worktree guard for the self-host targets (issue 7967): a feature-branch
+# worktree carries .env.worktree and, by repo policy, no .env. Running the
+# self-host stack from there shares the hardcoded Compose project with the
+# main checkout and can (re)initialize its postgres volume. Fail fast with
+# guidance instead of silently clobbering the running stack.
+define REQUIRE_SELFHOST_MAIN
+	@if [ ! -f .env ] && [ -f .env.worktree ]; then \
+		echo "Refusing to run the self-host stack from a worktree."; \
+		echo "This checkout has .env.worktree but no .env, so it shares the"; \
+		echo "Compose project 'multica' with your main checkout -- running"; \
+		echo "selfhost here can recreate its postgres and break its stack"; \
+		echo "(multica-ai/multica issue 7967)."; \
+		echo "Run 'make selfhost' from the main checkout instead."; \
+		exit 1; \
+	fi
+endef
+
 # Self-hosting requires the Docker Compose CLI plugin (`docker compose`).
 # The self-host compose files use compose-spec syntax (top-level `name:`, no
 # `version:`) that the legacy v1 `docker-compose` standalone cannot parse, so we
@@ -81,6 +98,7 @@ makehelp: help ## Alias for `make help`
 
 selfhost: ## Create .env if needed, then pull and start the official self-hosted images
 	$(REQUIRE_COMPOSE)
+	$(REQUIRE_SELFHOST_MAIN)
 	@if [ ! -f .env ]; then \
 		echo "==> Creating .env from .env.example..."; \
 		cp .env.example .env; \
@@ -114,6 +132,7 @@ selfhost: ## Create .env if needed, then pull and start the official self-hosted
 
 selfhost-build: ## Build backend/web from the current checkout and start the self-hosted stack
 	$(REQUIRE_COMPOSE)
+	$(REQUIRE_SELFHOST_MAIN)
 	@if [ ! -f .env ]; then \
 		echo "==> Creating .env from .env.example..."; \
 		cp .env.example .env; \
@@ -139,6 +158,7 @@ selfhost-build: ## Build backend/web from the current checkout and start the sel
 
 selfhost-stop: ## Stop the self-hosted Docker Compose stack
 	$(REQUIRE_COMPOSE)
+	$(REQUIRE_SELFHOST_MAIN)
 	@echo "==> Stopping Multica services..."
 	$(COMPOSE) -f docker-compose.selfhost.yml down
 	@echo "✓ All services stopped."

@@ -120,6 +120,51 @@ WORKTREE_NAME=selfhost-config-test bash scripts/init-worktree-env.sh "$worktree_
 worktree_backend_port="$(sed -n 's/^PORT=//p' "$worktree_env")"
 require_env "$(cat "$worktree_env")" "MULTICA_PUBLIC_URL=http://localhost:${worktree_backend_port}"
 
+# Regression for #7967: both compose files previously hardcoded `name: multica`,
+# so every checkout shared one Compose project and the selfhost stack from one
+# checkout could (re)initialize the shared postgres volume with another
+# checkout's credentials. The name must stay `multica` by default (no behavior
+# change for single-checkout users) while honoring an explicit
+# COMPOSE_PROJECT_NAME override, and the worktree env must NOT set it (dev
+# flows target the shared stack; overriding there would fork a second postgres
+# onto the same host port). Guard note: resolve names with node, which is an
+# established prerequisite -- do not introduce a python3 dependency here.
+compose_project_name() {
+  local compose_file=$1
+  shift
+  env "$@" docker compose --env-file "$tmp_env" -f "$compose_file" config --format json |
+    node -e 'let r="";process.stdin.on("data",c=>r+=c);process.stdin.on("end",()=>{console.log(JSON.parse(r).name)})'
+}
+
+selfhost_name="$(compose_project_name docker-compose.selfhost.yml COMPOSE_PROJECT_NAME=)"
+if [ "$selfhost_name" != "multica" ]; then
+  echo "Default compose project name changed: got '$selfhost_name', want 'multica'."
+  exit 1
+fi
+dev_name="$(compose_project_name docker-compose.yml COMPOSE_PROJECT_NAME=)"
+if [ "$dev_name" != "multica" ]; then
+  echo "docker-compose.yml default project name changed: got '$dev_name', want 'multica'."
+  exit 1
+fi
+overridden_selfhost="$(compose_project_name docker-compose.selfhost.yml COMPOSE_PROJECT_NAME=isolated_checkout_a)"
+if [ "$overridden_selfhost" != "isolated_checkout_a" ]; then
+  echo "COMPOSE_PROJECT_NAME is ignored by docker-compose.selfhost.yml (hardcoded name: multica)."
+  echo "Per-checkout isolation from issue #7967 requires: name: \${COMPOSE_PROJECT_NAME:-multica}"
+  exit 1
+fi
+overridden_dev="$(compose_project_name docker-compose.yml COMPOSE_PROJECT_NAME=isolated_checkout_a)"
+if [ "$overridden_dev" != "isolated_checkout_a" ]; then
+  echo "COMPOSE_PROJECT_NAME is ignored by docker-compose.yml (hardcoded name: multica)."
+  echo "Per-checkout isolation from issue #7967 requires: name: \${COMPOSE_PROJECT_NAME:-multica}"
+  exit 1
+fi
+if grep -q '^COMPOSE_PROJECT_NAME=' "$worktree_env"; then
+  echo "init-worktree-env.sh must NOT set COMPOSE_PROJECT_NAME: dev flows (db-up /"
+  echo "ensure-postgres.sh) target the shared postgres project, and an override in"
+  echo ".env.worktree would fork a second postgres onto the same host port (#7967)."
+  exit 1
+fi
+
 resolve_local_public_url() {
   env -i PATH="$PATH" bash -c '
     set -euo pipefail

@@ -24,6 +24,12 @@ frontend_port=$((13000 + offset))
 frontend_origin="http://localhost:${frontend_port}"
 
 cat > "$ENV_FILE" <<EOF
+# Dev isolation is at the database level (one DB per worktree) against the
+# shared postgres container -- see CONTRIBUTING.md. Deliberately NO
+# COMPOSE_PROJECT_NAME here: the make-based dev flow (db-up / ensure-postgres)
+# must keep targeting the shared stack, and an override in this file would
+# fork a second postgres onto the same host port. Upstream context:
+# multica-ai/multica issue 7967.
 POSTGRES_DB=${postgres_db}
 POSTGRES_USER=multica
 POSTGRES_PASSWORD=multica
